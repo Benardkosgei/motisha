@@ -1,0 +1,105 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --navy: #0A1628;
+  --navy-mid: #0D1F3C;
+  --navy-light: #152847;
+  --teal: #0EA5E9;
+  --teal-dark: #0369A1;
+  --teal-glow: #38BDF8;
+  --turquoise: #06B6D4;
+  --mustard: #F5A623;
+  --mustard-light: #FBBF24;
+  --mustard-dark: #D97706;
+  --white: #F8FAFC;
+  --off-white: #E2E8F0;
+  --gray: #94A3B8;
+  --gray-dark: #475569;
+  --success: #10B981;
+  --danger: #EF4444;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-navy-mid: var(--navy-mid);
+  --color-navy-light: var(--navy-light);
+  --color-teal: var(--teal);
+  --color-teal-dark: var(--teal-dark);
+  --color-teal-glow: var(--teal-glow);
+  --color-turquoise: var(--turquoise);
+  --color-mustard: var(--mustard);
+  --color-mustard-light: var(--mustard-light);
+  --color-mustard-dark: var(--mustard-dark);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --font-bebas: 'Bebas Neue', 'Impact', sans-serif;
+  --font-dm-sans: 'DM Sans', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--navy);
+  color: var(--white);
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(14, 165, 233, 0.2);
+  border-radius: 4px;
+}
+
+button {
+  font-family: 'DM Sans', sans-serif;
+}
+
+input, textarea, select {
+  font-family: 'DM Sans', sans-serif;
+  color: #F8FAFC;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #475569;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Mobile responsive layout */
+@media (max-width: 768px) {
+  main {
+    padding: 70px 16px 0 !important;
+  }
+}

@@ -1,0 +1,81 @@
+-- ============================================================
+-- Motisha — Master Schema Reference
+-- ============================================================
+-- This file is the canonical reference for the full database
+-- schema. It is NOT meant to be run directly in production.
+--
+-- HOW TO APPLY:
+--   Run migrations in order, then the seed:
+--
+--   1. supabase/migrations/20250101000000_initial_schema.sql
+--   2. supabase/migrations/20250101000001_storage.sql
+--   3. supabase/migrations/20250101000002_referral_points_trigger.sql
+--   4. supabase/migrations/20250101000003_leaderboard_view.sql
+--   5. supabase/seed.sql   (content data)
+--
+-- In the Supabase dashboard:
+--   SQL Editor → paste each file → Run
+--
+-- With Supabase CLI (if installed):
+--   supabase db push
+--   supabase db seed
+-- ============================================================
+
+-- ============================================================
+-- TABLES SUMMARY
+-- ============================================================
+--
+-- public.profiles
+--   One row per auth user. Created automatically via trigger.
+--   Columns: id, email, name, county, role, points,
+--            referral_code, downloads_used, downloads_limit,
+--            created_at
+--
+-- public.contents
+--   Weekly content calendar items (speeches, newsletters, etc.)
+--   Columns: id, title, type, icon, description, premium,
+--            pdf_available, week, modules, file_url, created_at
+--
+-- public.user_courses
+--   Per-user course progress tracking.
+--   Columns: id, user_id, content_id, progress,
+--            completed_modules, last_accessed
+--
+-- public.notifications
+--   Per-user notification inbox.
+--   Columns: id, user_id, title, body, icon, color, read,
+--            created_at
+--
+-- public.referrals
+--   Tracks referrer → referred relationships and points.
+--   Columns: id, referrer_id, referred_id, points_earned,
+--            created_at
+--
+-- public.author_submissions
+--   Content submitted by teacher-authors for review.
+--   Columns: id, user_id, title, type, description, file_url,
+--            status, earnings, created_at
+--
+-- ============================================================
+-- VIEWS
+-- ============================================================
+--
+-- public.referral_leaderboard
+--   Aggregated view: name, county, total_referrals, total_points
+--
+-- ============================================================
+-- STORAGE BUCKETS
+-- ============================================================
+--
+-- content-files  (private, 50 MB limit)
+--   Path pattern: submissions/{user_id}/{timestamp}.{ext}
+--   Allowed types: PDF, Word, PowerPoint
+--
+-- ============================================================
+-- TRIGGERS & FUNCTIONS
+-- ============================================================
+--
+-- handle_new_user()       — creates profile row on auth signup
+-- handle_referral_points() — awards points when referral inserted
+--
+-- ============================================================
