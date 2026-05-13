@@ -23,15 +23,15 @@ export function ReferralTab({ profile }: ReferralTabProps) {
   const [copied, setCopied] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [myRefs, setMyRefs] = useState(0);
+  const [commissions, setCommissions] = useState<{ total: number; pending: number }>({ total: 0, pending: 0 });
 
   const code = profile?.referral_code ?? '—';
   const points = profile?.points ?? 0;
-  const cashValue = Math.floor(points / 100) * 50;
+  const commissionBalance = profile?.referral_commission_balance ?? 0;
 
   const fetchLeaderboard = useCallback(async () => {
     if (!session?.user) return;
 
-    // Use the leaderboard view (migration 004)
     const { data } = await supabase
       .from('referral_leaderboard')
       .select('id, name, county, total_referrals, total_points')
@@ -54,7 +54,22 @@ export function ReferralTab({ profile }: ReferralTabProps) {
     setMyRefs(mine?.total_referrals ?? 0);
   }, [session?.user]);
 
-  useEffect(() => { fetchLeaderboard(); }, [fetchLeaderboard]);
+  const fetchCommissions = useCallback(async () => {
+    if (!session?.user) return;
+    const { data } = await supabase
+      .from('referral_commissions')
+      .select('commission_kes, status')
+      .eq('referrer_id', session.user.id);
+    if (!data) return;
+    const total = data.reduce((sum, r) => sum + Number(r.commission_kes), 0);
+    const pending = data.filter(r => r.status === 'pending').reduce((sum, r) => sum + Number(r.commission_kes), 0);
+    setCommissions({ total, pending });
+  }, [session?.user]);
+
+  useEffect(() => {
+    fetchLeaderboard();
+    fetchCommissions();
+  }, [fetchLeaderboard, fetchCommissions]);
 
   const handleCopy = () => {
     if (code === '—') return;
@@ -67,7 +82,7 @@ export function ReferralTab({ profile }: ReferralTabProps) {
     <div style={{ paddingBottom: 40 }}>
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '2rem', letterSpacing: '0.08em', marginBottom: 4 }}>Refer & Earn</h2>
-        <p style={{ color: C.gray, fontSize: '0.85rem' }}>Share your unique code. Earn 100 points per referral. Redeem for cash or courses.</p>
+        <p style={{ color: C.gray, fontSize: '0.85rem' }}>Share your unique code. Earn <strong style={{ color: C.teal }}>15% commission</strong> on individual subscriptions and <strong style={{ color: C.mustard }}>20%</strong> on admin subscriptions — paid immediately.</p>
       </div>
 
       {/* Promo code card */}
@@ -92,7 +107,7 @@ export function ReferralTab({ profile }: ReferralTabProps) {
             {[
               { label: 'Your Referrals', value: String(myRefs), icon: '👥', color: C.teal },
               { label: 'Points Earned', value: String(points), icon: '⭐', color: C.mustard },
-              { label: 'Cash Value', value: `KES ${cashValue}`, icon: '💰', color: C.success },
+              { label: 'Commission', value: `KES ${commissionBalance.toFixed(0)}`, icon: '💰', color: C.success },
             ].map(s => (
               <div key={s.label} style={{ padding: '12px 10px', borderRadius: 10, background: 'rgba(0,0,0,0.25)', textAlign: 'center' }}>
                 <div style={{ fontSize: '1.2rem', marginBottom: 3 }} aria-hidden="true">{s.icon}</div>
@@ -104,36 +119,33 @@ export function ReferralTab({ profile }: ReferralTabProps) {
         </div>
       </div>
 
-      {/* Redemption options */}
+      {/* Commission breakdown */}
       <div style={{ marginBottom: 24 }}>
-        <h3 style={{ color: C.white, fontWeight: 700, fontSize: '0.9rem', marginBottom: 12 }}>Redeem Your Points</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <h3 style={{ color: C.white, fontWeight: 700, fontSize: '0.9rem', marginBottom: 12 }}>💸 Commission Earnings</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           {[
-            { label: 'Redeem for Cash', note: '100 pts = KES 50 · M-Pesa', icon: '💸', color: C.success, minPts: 100 },
-            { label: 'Unlock a Course', note: '500 pts = 1 premium course', icon: '🎓', color: C.teal, minPts: 500 },
-            { label: 'Free Pro Month', note: '1,200 pts = 1 month Pro', icon: '⭐', color: C.mustard, minPts: 1200 },
-            { label: 'Content Pack', note: '300 pts = 20 downloads', icon: '📦', color: C.turquoise, minPts: 300 },
-          ].map(opt => {
-            const available = points >= opt.minPts;
-            return (
-              <button
-                key={opt.label}
-                disabled={!available}
-                aria-disabled={!available}
-                style={{
-                  padding: '16px', borderRadius: 12, textAlign: 'left',
-                  background: available ? `${opt.color}10` : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${available ? `${opt.color}30` : 'rgba(255,255,255,0.06)'}`,
-                  cursor: available ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s', opacity: available ? 1 : 0.5,
-                }}
-              >
-                <div style={{ fontSize: '1.4rem', marginBottom: 8 }} aria-hidden="true">{opt.icon}</div>
-                <div style={{ color: C.white, fontWeight: 700, fontSize: '0.82rem' }}>{opt.label}</div>
-                <div style={{ color: C.gray, fontSize: '0.7rem', marginTop: 2 }}>{opt.note}</div>
-              </button>
-            );
-          })}
+            { label: 'Individual Plan', rate: '15%', example: 'KES 225/mo · KES 750/term · KES 1,800/yr', icon: '👤', color: C.teal },
+            { label: 'Admin Plan', rate: '20%', example: 'KES 1,300/mo · KES 4,500/term · KES 12,000/yr', icon: '🏫', color: C.mustard },
+          ].map(opt => (
+            <div key={opt.label} style={{ padding: '16px', borderRadius: 12, background: `${opt.color}10`, border: `1px solid ${opt.color}25` }}>
+              <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>{opt.icon}</div>
+              <div style={{ color: opt.color, fontWeight: 900, fontSize: '1.4rem' }}>{opt.rate}</div>
+              <div style={{ color: C.white, fontWeight: 700, fontSize: '0.82rem' }}>{opt.label}</div>
+              <div style={{ color: C.gray, fontSize: '0.68rem', marginTop: 4, lineHeight: 1.4 }}>{opt.example}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '12px 16px', borderRadius: 10, background: `${C.success}10`, border: `1px solid ${C.success}25`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ color: C.white, fontWeight: 700, fontSize: '0.84rem' }}>Total Commission Earned</div>
+            <div style={{ color: C.gray, fontSize: '0.72rem' }}>Paid to your M-Pesa when referral subscribes</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ color: C.success, fontWeight: 900, fontSize: '1.2rem' }}>KES {commissions.total.toFixed(0)}</div>
+            {commissions.pending > 0 && (
+              <div style={{ color: C.mustard, fontSize: '0.68rem' }}>KES {commissions.pending.toFixed(0)} pending</div>
+            )}
+          </div>
         </div>
       </div>
 

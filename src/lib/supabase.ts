@@ -3,7 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+})
 
 // Database types
 export interface User {
@@ -11,7 +17,9 @@ export interface User {
   email: string
   name: string
   county: string
-  role: 'free' | 'pro' | 'school'
+  role: 'user' | 'admin'
+  subscription_tier: 'free' | 'pro' | 'school'
+  status?: 'active' | 'suspended'
   points: number
   referral_code: string
   downloads_used: number

@@ -5,6 +5,7 @@ import { C } from './Logo';
 import { COURSES, Course } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { isPaidSubscriptionTier } from '@/lib/profile-access';
 
 interface CourseProgress {
   content_id: string;
@@ -13,11 +14,15 @@ interface CourseProgress {
 }
 
 export function CoursesTab() {
-  const { session } = useAuth();
+  const { session, profile, isOnTrial, trialDaysLeft } = useAuth();
   const [selected, setSelected] = useState<Course | null>(null);
   const [reminderSet, setReminderSet] = useState<Record<string, boolean>>({});
   const [progressMap, setProgressMap] = useState<Record<string, CourseProgress>>({});
   const [saving, setSaving] = useState<string | null>(null);
+
+  const onTrial = isOnTrial();
+  const daysLeft = trialDaysLeft();
+  const isPaid = isPaidSubscriptionTier(profile?.subscription_tier);
 
   const fetchProgress = useCallback(async () => {
     if (!session?.user) return;
@@ -76,22 +81,39 @@ export function CoursesTab() {
         <p style={{ color: C.gray, fontSize: '0.85rem' }}>Track progress, set reminders and pick up where you left off.</p>
       </div>
 
+      {/* Trial restriction banner */}
+      {onTrial && !isPaid && (
+        <div style={{ padding: '20px 24px', borderRadius: 14, background: `${C.mustard}12`, border: `1px solid ${C.mustard}35`, marginBottom: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', marginBottom: 10 }}>🔒</div>
+          <div style={{ color: C.white, fontWeight: 700, fontSize: '0.95rem', marginBottom: 6 }}>
+            Courses not available during free trial
+          </div>
+          <div style={{ color: C.gray, fontSize: '0.82rem', marginBottom: 16 }}>
+            Your trial ends in {daysLeft} day{daysLeft !== 1 ? 's' : ''}. Subscribe to unlock the full course library.
+          </div>
+          <a href="#pricing" style={{ display: 'inline-block', padding: '10px 24px', borderRadius: 10, fontWeight: 800, fontSize: '0.84rem', background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`, color: C.navy, textDecoration: 'none' }}>
+            View Plans
+          </a>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 32 }}>
         {courses.map(c => (
           <div
             key={c.id}
-            onClick={() => setSelected(c)}
+            onClick={() => !onTrial && setSelected(c)}
             role="button"
             tabIndex={0}
-            aria-label={`${c.title}, ${c.progress}% complete`}
-            onKeyDown={e => e.key === 'Enter' && setSelected(c)}
+            aria-label={`${c.title}, ${c.progress}% complete${onTrial ? ', locked during trial' : ''}`}
+            onKeyDown={e => e.key === 'Enter' && !onTrial && setSelected(c)}
             style={{
-              borderRadius: 16, padding: 20, cursor: 'pointer',
+              borderRadius: 16, padding: 20, cursor: onTrial ? 'not-allowed' : 'pointer',
               background: `linear-gradient(135deg, ${c.color}14, ${C.navyMid})`,
               border: `1px solid ${c.color}30`,
               transition: 'transform 0.2s, box-shadow 0.2s',
+              opacity: onTrial ? 0.5 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 30px ${c.color}25`; }}
+            onMouseEnter={e => { if (!onTrial) { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 30px ${c.color}25`; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>

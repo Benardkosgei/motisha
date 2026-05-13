@@ -1,0 +1,205 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Download, Search, Loader2 } from 'lucide-react';
+import { C, TYPE_COLORS_MAP } from './Logo';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import type { Profile } from '@/lib/auth-context';
+import { isPaidSubscriptionTier } from '@/lib/profile-access';
+
+interface ResourcesTabProps {
+  profile: Profile | null;
+}
+
+interface Resource {
+  id: string;
+  title: string;
+  type: string;
+  icon: string;
+  description: string;
+  premium: boolean;
+  pdf_available: boolean;
+  file_url: string | null;
+  created_at: string;
+  status: string;
+}
+
+const RESOURCE_TYPES = ['All', 'Audio', 'Research', 'Text', 'Guide', 'Template', 'Resource'];
+
+export function ResourcesTab({ profile }: ResourcesTabProps) {
+  const { session } = useAuth();
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [error, setError] = useState<string | null>(null);
+
+  const isPaid = isPaidSubscriptionTier(profile?.subscription_tier);
+
+  const fetchResources = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let query = supabase
+        .from('contents')
+        .select('*')
+        .eq('status', 'published')
+        .in('type', ['Resource', 'Guide', 'Template'])
+        .order('created_at', { ascending: false });
+
+      if (search.trim()) {
+        query = query.ilike('title', `%${search.trim()}%`);
+      }
+
+      if (filter !== 'All') {
+        query = query.eq('type', filter);
+      }
+
+      const { data, error: fetchError } = await query.limit(50);
+      if (fetchError) throw new Error(fetchError.message);
+      setResources((data ?? []) as Resource[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load resources');
+    } finally {
+      setLoading(false);
+    }
+  }, [search, filter]);
+
+  useEffect(() => {
+    fetchResources();
+  }, [fetchResources]);
+
+  const handleDownload = async (resource: Resource) => {
+    if (resource.premium && !isPaid) return;
+    if (!resource.file_url) return;
+    window.open(resource.file_url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div style={{ paddingBottom: 40 }}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '2rem', letterSpacing: '0.08em', marginBottom: 4 }}>
+          Resources
+        </h2>
+        <p style={{ color: C.gray, fontSize: '0.85rem' }}>
+          Additional materials — audio, research, texts, guides, and templates for Kenyan teachers.
+        </p>
+      </div>
+
+      {/* Search + filter */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.grayDark, pointerEvents: 'none' }} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search resources…"
+            style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(14,165,233,0.2)`, color: C.white, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {RESOURCE_TYPES.map(t => (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              style={{
+                padding: '8px 14px', borderRadius: 8, fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                background: filter === t ? `${C.teal}25` : 'rgba(255,255,255,0.05)',
+                color: filter === t ? C.teal : C.gray,
+                border: `1px solid ${filter === t ? `${C.teal}40` : 'rgba(255,255,255,0.1)'}`,
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+          <Loader2 size={28} color={C.teal} style={{ animation: 'spin 0.8s linear infinite' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      ) : error ? (
+        <div style={{ padding: '20px', borderRadius: 12, background: `${C.danger}10`, border: `1px solid ${C.danger}25`, color: C.danger, textAlign: 'center', fontSize: '0.85rem' }}>
+          {error}
+          <button onClick={fetchResources} style={{ display: 'block', margin: '10px auto 0', padding: '8px 16px', borderRadius: 8, background: `${C.teal}20`, color: C.teal, border: `1px solid ${C.teal}30`, cursor: 'pointer', fontSize: '0.8rem' }}>
+            Retry
+          </button>
+        </div>
+      ) : resources.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: C.gray }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📚</div>
+          <div style={{ fontSize: '0.88rem', marginBottom: 6 }}>No resources found</div>
+          <div style={{ fontSize: '0.76rem', color: C.grayDark }}>
+            {search || filter !== 'All' ? 'Try adjusting your search or filter.' : 'Resources will appear here as they are published.'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {resources.map(r => {
+            const locked = r.premium && !isPaid;
+            const typeColor = (TYPE_COLORS_MAP as Record<string, string>)[r.type] ?? C.teal;
+            return (
+              <div
+                key={r.id}
+                style={{
+                  display: 'flex', gap: 16, padding: '16px 18px', borderRadius: 14, alignItems: 'center',
+                  background: locked ? 'rgba(255,255,255,0.02)' : `${typeColor}08`,
+                  border: `1px solid ${locked ? 'rgba(255,255,255,0.06)' : `${typeColor}25`}`,
+                  opacity: locked ? 0.7 : 1,
+                }}
+              >
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${typeColor}18`, border: `1px solid ${typeColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
+                  {r.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+                    <span style={{ color: C.white, fontWeight: 700, fontSize: '0.88rem' }}>{r.title}</span>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 7px', borderRadius: 5, background: `${typeColor}20`, color: typeColor }}>
+                      {r.type}
+                    </span>
+                    {r.premium && (
+                      <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '2px 7px', borderRadius: 5, background: `${C.mustard}20`, color: C.mustard }}>
+                        PRO
+                      </span>
+                    )}
+                  </div>
+                  {r.description && (
+                    <p style={{ color: C.gray, fontSize: '0.76rem', lineHeight: 1.5, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.description}
+                    </p>
+                  )}
+                  <div style={{ color: C.grayDark, fontSize: '0.68rem', marginTop: 4 }}>
+                    {new Date(r.created_at).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                </div>
+                {r.file_url ? (
+                  <button
+                    onClick={() => handleDownload(r)}
+                    disabled={locked}
+                    aria-label={locked ? 'Upgrade to download' : `Download ${r.title}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.76rem', flexShrink: 0,
+                      background: locked ? 'rgba(255,255,255,0.05)' : `${typeColor}20`,
+                      color: locked ? C.grayDark : typeColor,
+                      border: `1px solid ${locked ? 'rgba(255,255,255,0.08)' : `${typeColor}30`}`,
+                      cursor: locked ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {locked ? '🔒 Pro' : <><Download size={13} /> Download</>}
+                  </button>
+                ) : (
+                  <div style={{ color: C.grayDark, fontSize: '0.72rem', flexShrink: 0 }}>No file</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

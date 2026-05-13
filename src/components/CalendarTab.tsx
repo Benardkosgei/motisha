@@ -36,6 +36,9 @@ export function CalendarTab({ profile }: CalendarTabProps) {
 
   useEffect(() => {
     async function load() {
+      // Wait until we have a session — contents RLS requires auth on this project
+      if (!session) return;
+
       const { data, error } = await supabase
         .from('contents')
         .select('*')
@@ -52,17 +55,17 @@ export function CalendarTab({ profile }: CalendarTabProps) {
       setWeeks(Object.keys(grouped));
     }
     load();
-  }, []);
+  }, [session]);
 
   const canDownload = () => {
     if (!profile) return false;
-    if (profile.role !== 'free') return true;
+    if (profile.subscription_tier !== 'free') return true;
     return profile.downloads_used < profile.downloads_limit;
   };
 
   const handleDownload = async (item: ContentItem) => {
     if (!session?.user) return;
-    if (item.premium && profile?.role === 'free') {
+    if (item.premium && profile?.subscription_tier === 'free') {
       setOpenItem(item);
       return;
     }
@@ -74,7 +77,7 @@ export function CalendarTab({ profile }: CalendarTabProps) {
     setDownloading(item.id);
 
     // Increment downloads_used for free users
-    if (profile?.role === 'free') {
+    if (profile?.subscription_tier === 'free') {
       await supabase
         .from('profiles')
         .update({ downloads_used: (profile.downloads_used ?? 0) + 1 })
@@ -248,7 +251,7 @@ export function CalendarTab({ profile }: CalendarTabProps) {
               <span style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.15em', padding: '3px 10px', borderRadius: 6, background: `${TYPE_COLORS[openItem.type] || C.teal}20`, color: TYPE_COLORS[openItem.type] || C.teal, border: `1px solid ${TYPE_COLORS[openItem.type] || C.teal}30`, marginBottom: 10, display: 'inline-block' }}>{openItem.type.toUpperCase()}</span>
               <h3 id="item-modal-title" style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '1.5rem', letterSpacing: '0.05em', margin: '8px 0 10px', lineHeight: 1.2 }}>{openItem.title}</h3>
               <p style={{ color: C.gray, fontSize: '0.84rem', lineHeight: 1.6, marginBottom: 20 }}>{openItem.description}</p>
-              {openItem.premium && profile?.role === 'free' ? (
+              {openItem.premium && profile?.subscription_tier === 'free' ? (
                 <button style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 800, fontSize: '0.88rem', background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`, color: C.navy, border: 'none', cursor: 'pointer' }}>
                   🔓 Unlock with Pro · KES 599/mo
                 </button>

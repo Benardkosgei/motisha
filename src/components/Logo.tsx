@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useLogo } from '@/lib/use-logo';
 
 // Design tokens
 export const C = {
@@ -20,6 +21,15 @@ export const C = {
   grayDark: '#475569',
   success: '#10B981',
   danger: '#EF4444',
+};
+
+export const TYPE_COLORS_MAP: Record<string, string> = {
+  Speech: C.teal,
+  Newsletter: C.mustard,
+  Course: C.turquoise,
+  Template: C.success,
+  Guide: '#A855F7',
+  Resource: '#A855F7',
 };
 
 export function MotishaIcon({ size = 36 }: { size?: number }) {
@@ -46,10 +56,25 @@ export function MotishaIcon({ size = 36 }: { size?: number }) {
 }
 
 export function MotishaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const logoUrl = useLogo();
   const textSize = size === 'lg' ? '1.8rem' : size === 'sm' ? '0.9rem' : '1.1rem';
   const tagSize = size === 'lg' ? '0.65rem' : '0.5rem';
   const iconSize = size === 'lg' ? 52 : size === 'sm' ? 28 : 36;
+  const imgHeight = size === 'lg' ? 52 : size === 'sm' ? 28 : 36;
   const gap = size === 'lg' ? 14 : size === 'sm' ? 8 : 10;
+
+  // If a custom logo has been uploaded, show it instead of the SVG icon + text
+  if (logoUrl) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap }}>
+        <img
+          src={logoUrl}
+          alt="Motisha logo"
+          style={{ height: imgHeight, width: 'auto', objectFit: 'contain', display: 'block' }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap }}>

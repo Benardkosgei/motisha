@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { BellOff, CheckCheck } from 'lucide-react';
 import { C } from './Logo';
 import type { Notification } from '@/lib/supabase';
 
@@ -22,8 +23,9 @@ export function NotificationsTab({ notifications, onMarkRead }: NotificationsTab
         {unreadCount > 0 && (
           <button
             onClick={onMarkRead}
-            style={{ padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.75rem', background: 'rgba(255,255,255,0.06)', color: C.gray, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.75rem', background: 'rgba(255,255,255,0.06)', color: C.gray, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
           >
+            <CheckCheck size={14} />
             Mark all read
           </button>
         )}
@@ -31,7 +33,9 @@ export function NotificationsTab({ notifications, onMarkRead }: NotificationsTab
 
       {notifications.length === 0 ? (
         <div style={{ textAlign: 'center', color: C.gray, padding: '60px 0', fontSize: '0.85rem' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 12 }}>🔔</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <BellOff size={32} color={C.grayDark} />
+          </div>
           No notifications yet
         </div>
       ) : (

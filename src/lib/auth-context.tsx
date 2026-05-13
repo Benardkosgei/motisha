@@ -3,18 +3,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import type { AccountRole, SubscriptionTier } from './profile-access';
 
 export interface Profile {
   id: string;
   email: string;
   name: string;
   county: string;
-  role: 'free' | 'pro' | 'school';
+  /** Staff (`admin`) vs registered teacher (`user`). Not a subscription label. */
+  role: AccountRole;
+  /** Product plan: free, pro (individual), or school bundle. */
+  subscription_tier: SubscriptionTier;
+  status?: 'active' | 'suspended';
   points: number;
   referral_code: string;
   downloads_used: number;
   downloads_limit: number;
   created_at: string;
+  phone?: string;
+  phone_verified?: boolean;
+  trial_started_at?: string | null;
+  trial_ends_at?: string | null;
+  subscription_package?: 'individual' | 'admin' | null;
+  subscription_billing?: 'monthly' | 'termly' | 'yearly' | null;
+  subscription_expires_at?: string | null;
+  referral_commission_balance?: number;
 }
 
 interface AuthContextValue {
@@ -22,10 +35,19 @@ interface AuthContextValue {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
+  signIn: (emailOrPhone: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    referredBy?: string
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  isOnTrial: () => boolean;
+  trialDaysLeft: () => number;
+  hasActiveSubscription: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('id', userId)
       .single();
     if (!error && data) setProfile(data as Profile);
+    else if (error) console.warn('[auth] fetchProfile error:', error.message);
   };
 
   const refreshProfile = async () => {
@@ -67,26 +90,119 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const signIn = async (emailOrPhone: string, password: string) => {
+    // Detect if input looks like a phone number (starts with + or digits)
+    const isPhone = /^[+\d]/.test(emailOrPhone.trim()) && !emailOrPhone.includes('@');
+
+    if (isPhone) {
+      // Normalize phone: ensure it starts with +254 for Kenya
+      let phone = emailOrPhone.trim().replace(/\s+/g, '');
+      if (phone.startsWith('07') || phone.startsWith('01')) {
+        phone = '+254' + phone.slice(1);
+      } else if (phone.startsWith('254') && !phone.startsWith('+')) {
+        phone = '+' + phone;
+      }
+      const { error } = await supabase.auth.signInWithPassword({ phone, password });
+      if (error) {
+        // Fallback: try to find email by phone in profiles
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('phone', phone)
+          .single();
+        if (profileData?.email) {
+          const { error: emailError } = await supabase.auth.signInWithPassword({
+            email: profileData.email,
+            password,
+          });
+          return { error: emailError?.message ?? null };
+        }
+        return { error: error.message };
+      }
+      return { error: null };
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: emailOrPhone, password });
     return { error: error?.message ?? null };
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    phone: string,
+    referredBy?: string
+  ) => {
+    // Normalize phone
+    let normalizedPhone = phone.trim().replace(/\s+/g, '');
+    if (normalizedPhone.startsWith('07') || normalizedPhone.startsWith('01')) {
+      normalizedPhone = '+254' + normalizedPhone.slice(1);
+    } else if (normalizedPhone.startsWith('254') && !normalizedPhone.startsWith('+')) {
+      normalizedPhone = '+' + normalizedPhone;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: {
+        data: {
+          name,
+          phone: normalizedPhone,
+          ...(referredBy ? { referred_by: referredBy.toUpperCase() } : {}),
+        },
+      },
     });
-    return { error: error?.message ?? null };
+
+    if (error) return { error: error.message };
+
+    // Store phone in profiles table directly (trigger may not have it yet)
+    if (data.user) {
+      await supabase
+        .from('profiles')
+        .update({ phone: normalizedPhone })
+        .eq('id', data.user.id);
+
+      // Start trial
+      await supabase.rpc('start_trial', { p_user_id: data.user.id });
+    }
+
+    return { error: null };
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
+  const isOnTrial = (): boolean => {
+    if (!profile) return false;
+    if (!profile.trial_ends_at) return false;
+    if (profile.subscription_tier !== 'free') return false;
+    return new Date(profile.trial_ends_at) > new Date();
+  };
+
+  const trialDaysLeft = (): number => {
+    if (!profile?.trial_ends_at) return 0;
+    const diff = new Date(profile.trial_ends_at).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  const hasActiveSubscription = (): boolean => {
+    if (!profile) return false;
+    if (profile.subscription_tier === 'pro' || profile.subscription_tier === 'school') {
+      if (profile.subscription_expires_at) {
+        return new Date(profile.subscription_expires_at) > new Date();
+      }
+      return true;
+    }
+    return false;
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signIn, signUp, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{
+      session, user, profile, loading,
+      signIn, signUp, signOut, refreshProfile,
+      isOnTrial, trialDaysLeft, hasActiveSubscription,
+    }}>
       {children}
     </AuthContext.Provider>
   );

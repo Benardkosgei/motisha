@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { LogOut, ShieldCheck, Menu, X, Star } from 'lucide-react';
 import { MotishaLogo } from './Logo';
 import { C } from './Logo';
 import { NavItem, NAV_ITEMS } from '@/lib/data';
@@ -42,12 +43,15 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
             <div style={{ color: C.white, fontWeight: 700, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.name ?? 'Loading…'}
             </div>
-            <div style={{ fontSize: '0.65rem', color: C.teal, fontWeight: 600 }}>
-              ⭐ {profile?.points ?? 0} pts · {profile?.role === 'pro' ? 'Pro' : profile?.role === 'school' ? 'School' : 'Free'} Plan
+            <div style={{ fontSize: '0.65rem', color: C.teal, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Star size={10} fill={C.mustard} color={C.mustard} />
+              {profile?.points ?? 0} pts ·{' '}
+              {profile?.role === 'admin' ? 'Staff · ' : ''}
+              {profile?.subscription_tier === 'pro' ? 'Pro' : profile?.subscription_tier === 'school' ? 'School' : 'Free'} Plan
             </div>
           </div>
         </div>
-        {profile?.role === 'free' && (
+        {profile?.subscription_tier === 'free' && (
           <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '6px 10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
               <span style={{ color: C.gray, fontSize: '0.65rem' }}>Monthly usage</span>
@@ -62,45 +66,63 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
         )}
       </div>
 
+      {/* Navigation */}
       <nav style={{ flex: 1, padding: '0 10px' }} aria-label="Main navigation">
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            onClick={() => { onNav(item.id); setMobileOpen(false); }}
-            aria-current={active === item.id ? 'page' : undefined}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 12px',
-              borderRadius: 10,
-              marginBottom: 2,
-              background: active === item.id ? `linear-gradient(135deg, ${C.teal}25, ${C.turquoise}10)` : 'transparent',
-              border: active === item.id ? `1px solid ${C.teal}40` : '1px solid transparent',
-              color: active === item.id ? C.tealGlow : C.gray,
-              fontWeight: active === item.id ? 700 : 500,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              textAlign: 'left',
-            }}
-          >
-            <span style={{ fontSize: '1rem' }} aria-hidden="true">{item.icon}</span>
-            <span style={{ flex: 1 }}>{item.label}</span>
-            {item.id === 'notifications' && notifCount > 0 && (
-              <span style={{ background: C.danger, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 6px', borderRadius: 8 }} aria-label={`${notifCount} unread`}>{notifCount}</span>
-            )}
-          </button>
-        ))}
+        {NAV_ITEMS.map(item => {
+          const Icon = item.icon;
+          const isActive = active === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => { onNav(item.id); setMobileOpen(false); }}
+              aria-current={isActive ? 'page' : undefined}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 10,
+                marginBottom: 2,
+                background: isActive ? `linear-gradient(135deg, ${C.teal}25, ${C.turquoise}10)` : 'transparent',
+                border: isActive ? `1px solid ${C.teal}40` : '1px solid transparent',
+                color: isActive ? C.tealGlow : C.gray,
+                fontWeight: isActive ? 700 : 500,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                textAlign: 'left',
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              <Icon size={16} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.7 }} aria-hidden="true" />
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {item.id === 'notifications' && notifCount > 0 && (
+                <span style={{ background: C.danger, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 6px', borderRadius: 8, minWidth: 18, textAlign: 'center' }} aria-label={`${notifCount} unread`}>{notifCount}</span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
+      {/* Footer */}
       <div style={{ padding: '12px 12px 24px', borderTop: `1px solid rgba(14,165,233,0.1)` }}>
+        {/* Admin Dashboard link — only visible to admin users */}
+        {profile?.role === 'admin' && (
+          <a
+            href="/admin"
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', borderRadius: 10, fontWeight: 600, fontSize: '0.78rem', background: `rgba(14,165,233,0.1)`, color: C.teal, border: `1px solid rgba(14,165,233,0.25)`, cursor: 'pointer', textDecoration: 'none', marginBottom: 8 }}
+          >
+            <ShieldCheck size={14} />
+            Admin Dashboard
+          </a>
+        )}
         <button
           onClick={onSignOut}
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, fontWeight: 600, fontSize: '0.78rem', background: 'rgba(239,68,68,0.08)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', textAlign: 'left' }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 10, fontWeight: 600, fontSize: '0.78rem', background: 'rgba(239,68,68,0.08)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', textAlign: 'left', fontFamily: "'DM Sans', sans-serif" }}
         >
-          🚪 Sign Out
+          <LogOut size={14} />
+          Sign Out
         </button>
         <div style={{ color: C.gray, fontSize: '0.65rem', textAlign: 'center', lineHeight: 1.5, marginTop: 10 }}>
           Motisha © 2025<br />
@@ -129,14 +151,13 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
           background: C.navyMid,
           border: `1px solid rgba(14,165,233,0.3)`,
           color: C.teal,
-          fontSize: '1.2rem',
           cursor: 'pointer',
           alignItems: 'center',
           justifyContent: 'center',
         }}
         className="mobile-menu-btn"
       >
-        {mobileOpen ? '✕' : '☰'}
+        {mobileOpen ? <X size={18} /> : <Menu size={18} />}
       </button>
 
       {/* Mobile overlay */}
@@ -148,7 +169,7 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
         />
       )}
 
-      {/* Sidebar */}
+      {/* Desktop sidebar */}
       <div
         style={{
           width: 230,

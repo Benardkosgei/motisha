@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { CalendarDays, GraduationCap, Gift, Briefcase, FolderOpen, Play, Download } from 'lucide-react';
 import { C } from './Logo';
 import { COURSES, NavItem } from '@/lib/data';
 import type { Profile } from '@/lib/auth-context';
@@ -49,15 +50,15 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               onClick={() => onNav('calendar')}
-              style={{ padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
             >
-              ▶ Open Now
+              <Play size={13} fill="currentColor" /> Open Now
             </button>
             <button
               onClick={() => onNav('calendar')}
-              style={{ padding: '10px 18px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', background: 'rgba(255,255,255,0.1)', color: C.white, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', background: 'rgba(255,255,255,0.1)', color: C.white, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
             >
-              ⬇ Download
+              <Download size={13} /> Download
             </button>
           </div>
         </div>
@@ -85,30 +86,35 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
       {/* Quick actions */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 28 }}>
         {[
-          { label: 'This Week', icon: '📅', color: C.teal, nav: 'calendar' as NavItem },
-          { label: 'My Courses', icon: '🎓', color: C.mustard, nav: 'courses' as NavItem },
-          { label: 'Refer & Earn', icon: '🎁', color: C.success, nav: 'referral' as NavItem },
-          { label: 'Author', icon: '✍️', color: C.turquoise, nav: 'author' as NavItem },
-        ].map(q => (
-          <button
-            key={q.label}
-            onClick={() => onNav(q.nav)}
-            style={{
-              padding: '14px 8px',
-              borderRadius: 12,
-              textAlign: 'center',
-              background: `${q.color}12`,
-              border: `1px solid ${q.color}25`,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
-            onMouseLeave={e => (e.currentTarget.style.transform = '')}
-          >
-            <div style={{ fontSize: '1.4rem', marginBottom: 5 }} aria-hidden="true">{q.icon}</div>
-            <div style={{ color: q.color, fontWeight: 700, fontSize: '0.72rem' }}>{q.label}</div>
-          </button>
-        ))}
+          { label: 'This Week', icon: CalendarDays, color: C.teal, nav: 'calendar' as NavItem },
+          { label: 'My Courses', icon: GraduationCap, color: C.mustard, nav: 'courses' as NavItem },
+          { label: 'Refer & Earn', icon: Gift, color: C.success, nav: 'referral' as NavItem },
+          { label: 'Book Service', icon: Briefcase, color: C.turquoise, nav: 'book-service' as NavItem },
+        ].map(q => {
+          const Icon = q.icon;
+          return (
+            <button
+              key={q.label}
+              onClick={() => onNav(q.nav)}
+              style={{
+                padding: '14px 8px',
+                borderRadius: 12,
+                textAlign: 'center',
+                background: `${q.color}12`,
+                border: `1px solid ${q.color}25`,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = '')}
+            >
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 5 }} aria-hidden="true">
+                <Icon size={22} color={q.color} strokeWidth={1.8} />
+              </div>
+              <div style={{ color: q.color, fontWeight: 700, fontSize: '0.72rem' }}>{q.label}</div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Continue learning */}

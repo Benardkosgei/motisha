@@ -1,4 +1,15 @@
 import { C } from '@/components/Logo';
+import {
+  Home,
+  CalendarDays,
+  GraduationCap,
+  Gift,
+  Briefcase,
+  FolderOpen,
+  CreditCard,
+  Bell,
+  type LucideIcon,
+} from 'lucide-react';
 
 export const WEEKLY_CONTENT: Record<string, ContentItem[]> = {
   'Week 1 – Jan 6': [
@@ -77,23 +88,6 @@ export interface LeaderboardUser {
   isMe?: boolean;
 }
 
-export const NOTIFICATIONS_INIT: Notification[] = [
-  { id: 1, title: 'New upload this week!', body: '"National Day Speech" just dropped — download now', time: '2 min ago', read: false, icon: '🆕', color: C.mustard },
-  { id: 2, title: 'Course reminder', body: 'Continue Public Speaking Masterclass — you\'re 35% through!', time: '1 hr ago', read: false, icon: '📚', color: C.teal },
-  { id: 3, title: 'You earned 100 points!', body: 'Peter Ochieng joined using your promo code JANE-MTX7', time: '3 hrs ago', read: true, icon: '🎉', color: C.success },
-  { id: 4, title: 'Commission earned', body: 'Your article earned KES 340 this month', time: 'Yesterday', read: true, icon: '💰', color: C.mustard },
-];
-
-export interface Notification {
-  id: number;
-  title: string;
-  body: string;
-  time: string;
-  read: boolean;
-  icon: string;
-  color: string;
-}
-
 export const TYPE_COLORS: Record<string, string> = {
   Speech: C.teal,
   Newsletter: C.mustard,
@@ -102,14 +96,21 @@ export const TYPE_COLORS: Record<string, string> = {
   Guide: '#A855F7',
 };
 
-export type NavItem = 'home' | 'calendar' | 'courses' | 'referral' | 'author' | 'pricing' | 'notifications';
+export type NavItem = 'home' | 'calendar' | 'courses' | 'referral' | 'book-service' | 'resources' | 'pricing' | 'notifications';
 
-export const NAV_ITEMS: { id: NavItem; label: string; icon: string }[] = [
-  { id: 'home', label: 'Home', icon: '⊞' },
-  { id: 'calendar', label: 'Weekly Calendar', icon: '📅' },
-  { id: 'courses', label: 'My Courses', icon: '🎓' },
-  { id: 'referral', label: 'Refer & Earn', icon: '🎁' },
-  { id: 'author', label: 'Author Content', icon: '✍️' },
-  { id: 'pricing', label: 'Plans', icon: '💳' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔' },
+export interface NavItemDef {
+  id: NavItem;
+  label: string;
+  icon: LucideIcon;
+}
+
+export const NAV_ITEMS: NavItemDef[] = [
+  { id: 'home',          label: 'Home',            icon: Home },
+  { id: 'calendar',      label: 'Weekly Calendar', icon: CalendarDays },
+  { id: 'courses',       label: 'My Courses',      icon: GraduationCap },
+  { id: 'referral',      label: 'Refer & Earn',    icon: Gift },
+  { id: 'book-service',  label: 'Book a Service',  icon: Briefcase },
+  { id: 'resources',     label: 'Resources',       icon: FolderOpen },
+  { id: 'pricing',       label: 'Plans',           icon: CreditCard },
+  { id: 'notifications', label: 'Notifications',   icon: Bell },
 ];
