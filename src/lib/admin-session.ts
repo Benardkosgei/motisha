@@ -77,7 +77,7 @@ async function hmacVerify(data: string, signature: string, secret: string): Prom
   const key = await getKey(secret);
   const enc = new TextEncoder();
   const sigBytes = base64urlDecode(signature);
-  return crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(data));
+  return crypto.subtle.verify('HMAC', key, sigBytes as Uint8Array, enc.encode(data));
 }
 
 // ---------------------------------------------------------------------------
