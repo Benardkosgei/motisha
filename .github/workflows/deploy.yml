@@ -25,6 +25,10 @@ jobs:
           npm cache clean --force
           npm install
 
+      - name: Create env file
+        run: |
+          echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" >> .env.local
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.local
    
       - name: Build Next.js App
         run: npm run build
