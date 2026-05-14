@@ -30,15 +30,15 @@ jobs:
 
       - name: Build and export Next.js (STATIC)
         run: |
-          npm run build
+          npm ci
           npm run export
 
       - name: Prepare deployment files
         run: |
-          rm -rf deploy
-          mkdir deploy
-          cp -r out/* deploy/
-          cp -r public deploy/
+            rm -rf deploy
+            mkdir deploy
+            cp -r out/* deploy/
+            cp -r public deploy/
 
       - name: Deploy via SFTP
         uses: appleboy/scp-action@v0.1.7
