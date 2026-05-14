@@ -44,11 +44,10 @@ jobs:
           cp next.config.js deploy/
 
       - name: Deploy
-        uses: appleboy/scp-action@v0.1.7
+        uses: SamKirkland/FTP-Deploy-Action@v4
         with:
-          host: ${{ secrets.CPANEL_HOST }}
+          server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASS }}
-          port: 1624
-          source: "./deploy/*"
-          target: "/home/${{ secrets.CPANEL_USERNAME }}/public_html/"
+          local-dir: ./out/
+          server-dir: /public_html/
