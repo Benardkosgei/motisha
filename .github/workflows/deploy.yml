@@ -31,6 +31,7 @@ jobs:
       - name: Build and export Next.js (STATIC)
         run: |
           npm ci
+          npm run build
           npm run export
 
       - name: Prepare deployment files
