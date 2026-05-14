@@ -43,14 +43,12 @@ jobs:
           cp package-lock.json deploy/
           cp next.config.js deploy/
 
-      - name: Upload to cPanel
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Deploy to cPanel via SFTP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USERNAME }}
-          password: ${{ secrets.CPANEL_PASS }}
-          port: 1624
-          protocol: ftp
-          local-dir: ./deploy/
-          server-dir: /public_html/
-          dangerous-clean-slate: false
+            host: ${{ secrets.CPANEL_HOST }}
+            username: ${{ secrets.CPANEL_USERNAME }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            port: 1624
+            source: "./deploy/*"
+            target: "/home/${{ secrets.CPANEL_USERNAME }}/public_html"
