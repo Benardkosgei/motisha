@@ -32,7 +32,6 @@ jobs:
         run: |
           npm ci
           npm run build
-          npm run export
 
       - name: Prepare deployment files
         run: |
