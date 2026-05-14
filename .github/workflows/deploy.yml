@@ -50,7 +50,7 @@ jobs:
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASS }}
           port: 22
-          protocol: ftps
+          protocol: ftp
           local-dir: ./deploy/
           server-dir: /public_html/
           dangerous-clean-slate: false
