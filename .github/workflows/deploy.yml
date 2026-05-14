@@ -49,7 +49,7 @@ jobs:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASS }}
-          port: 21
+          port: 1624
           protocol: ftp
           local-dir: ./deploy/
           server-dir: /public_html/
