@@ -49,5 +49,8 @@ jobs:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASS }}
+          protocol: ftps 
+          port: 21
           local-dir: ./deploy/
           server-dir: /public_html/
+          sftp_only: true
