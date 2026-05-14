@@ -20,9 +20,7 @@ jobs:
           cache: "npm"
 
       - name: Install Dependencies
-        run: |
-          rm -rf node_modules package-lock.json
-          npm ci --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: Build Next.js App
         run: npm run build
