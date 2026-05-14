@@ -28,17 +28,18 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.local
           echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> .env.local
 
-      - name: Build and export Next.js (STATIC)
-        run: |
-          npm ci
-          npm run build
+      - name: Build Next.js App
+        run: npm run build
 
       - name: Prepare deployment files
         run: |
-            rm -rf deploy
-            mkdir deploy
-            cp -r out/* deploy/
-            cp -r public deploy/
+          rm -rf deploy
+          mkdir deploy
+          cp -r .next deploy/
+          cp -r public deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          cp next.config.js deploy/
 
       - name: Deploy via SFTP
         uses: appleboy/scp-action@v0.1.7
