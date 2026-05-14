@@ -49,5 +49,5 @@ jobs:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_USERNAME }}
           password: ${{ secrets.CPANEL_PASS }}
-          local-dir: ./out/
+          local-dir: ./deploy/
           server-dir: /public_html/
