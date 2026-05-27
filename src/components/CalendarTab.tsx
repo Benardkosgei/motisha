@@ -6,11 +6,12 @@ import { TYPE_COLORS } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import type { Profile } from '@/lib/auth-context';
+import type { NavItem } from '@/lib/data';
 
 interface ContentItem {
   id: string;
   title: string;
-  type: 'Speech' | 'Newsletter' | 'Course' | 'Template' | 'Guide';
+  type: 'Speech' | 'Newsletter' | 'Course' | 'Template' | 'Guide' | 'Article' | 'Resource';
   icon: string;
   description: string;
   premium: boolean;
@@ -23,9 +24,10 @@ interface ContentItem {
 
 interface CalendarTabProps {
   profile: Profile | null;
+  onNav: (id: NavItem) => void;
 }
 
-export function CalendarTab({ profile }: CalendarTabProps) {
+export function CalendarTab({ profile, onNav }: CalendarTabProps) {
   const { session, refreshProfile } = useAuth();
   const [contentByWeek, setContentByWeek] = useState<Record<string, ContentItem[]>>({});
   const [weeks, setWeeks] = useState<string[]>([]);
@@ -33,17 +35,33 @@ export function CalendarTab({ profile }: CalendarTabProps) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<ContentItem | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [proMonthlyPrice, setProMonthlyPrice] = useState<number | null>(null);
+
+  // Fetch the live individual monthly price for the upgrade prompt
+  useEffect(() => {
+    fetch('/api/public/plans')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { plans?: { package: string; billing: string; price_kes: number }[] } | null) => {
+        const plan = data?.plans?.find(p => p.package === 'individual' && p.billing === 'monthly');
+        if (plan) setProMonthlyPrice(plan.price_kes);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function load() {
       // Wait until we have a session — contents RLS requires auth on this project
       if (!session) return;
 
+      setLoading(true);
       const { data, error } = await supabase
         .from('contents')
         .select('*')
+        .eq('status', 'published')
         .order('created_at', { ascending: true });
 
+      setLoading(false);
       if (error) { setFetchError('Failed to load content.'); return; }
 
       const grouped: Record<string, ContentItem[]> = {};
@@ -110,8 +128,20 @@ export function CalendarTab({ profile }: CalendarTabProps) {
         <p style={{ color: C.gray, fontSize: '0.85rem' }}>Click any week to browse that week's uploads — speeches, newsletters, templates & more.</p>
       </div>
 
-      {weeks.length === 0 ? (
-        <div style={{ textAlign: 'center', color: C.gray, padding: '40px 0' }}>Loading content…</div>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: C.gray, padding: '40px 0' }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', border: `3px solid ${C.teal}40`, borderTopColor: C.teal, animation: 'cal-spin 0.7s linear infinite', margin: '0 auto 12px' }} />
+          Loading content…
+          <style>{`@keyframes cal-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      ) : weeks.length === 0 ? (
+        <div style={{ textAlign: 'center', color: C.gray, padding: '60px 20px' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📅</div>
+          <div style={{ fontSize: '0.88rem', marginBottom: 6 }}>No content published yet</div>
+          <div style={{ fontSize: '0.76rem', color: C.grayDark }}>
+            {!session ? 'Sign in to view the content calendar.' : 'Content will appear here as it is published each week.'}
+          </div>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {weeks.map((week, wi) => {
@@ -252,12 +282,25 @@ export function CalendarTab({ profile }: CalendarTabProps) {
               <h3 id="item-modal-title" style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '1.5rem', letterSpacing: '0.05em', margin: '8px 0 10px', lineHeight: 1.2 }}>{openItem.title}</h3>
               <p style={{ color: C.gray, fontSize: '0.84rem', lineHeight: 1.6, marginBottom: 20 }}>{openItem.description}</p>
               {openItem.premium && profile?.subscription_tier === 'free' ? (
-                <button style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 800, fontSize: '0.88rem', background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`, color: C.navy, border: 'none', cursor: 'pointer' }}>
-                  🔓 Unlock with Pro · KES 599/mo
+                <button
+                  onClick={() => { setOpenItem(null); onNav('pricing'); }}
+                  style={{ width: '100%', padding: '13px', borderRadius: 10, fontWeight: 800, fontSize: '0.88rem', background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`, color: C.navy, border: 'none', cursor: 'pointer' }}
+                >
+                  🔓 Unlock with Pro{proMonthlyPrice ? ` · KES ${proMonthlyPrice.toLocaleString()}/mo` : ''}
                 </button>
               ) : (
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button style={{ flex: 1, padding: '11px', borderRadius: 10, fontWeight: 700, fontSize: '0.84rem', background: `linear-gradient(135deg, ${C.teal}, ${C.tealDark})`, color: '#fff', border: 'none', cursor: 'pointer' }}>
+                  <button
+                    onClick={() => {
+                      setOpenItem(null);
+                      if (openItem.type === 'Course') onNav('courses');
+                      else if (openItem.type === 'Speech') onNav('speeches');
+                      else if (openItem.type === 'Article') onNav('articles');
+                      else if (openItem.type === 'Newsletter') onNav('newsletters');
+                      else if (openItem.type === 'Resource' || openItem.type === 'Guide' || openItem.type === 'Template') onNav('resources');
+                    }}
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, fontWeight: 700, fontSize: '0.84rem', background: `linear-gradient(135deg, ${C.teal}, ${C.tealDark})`, color: '#fff', border: 'none', cursor: 'pointer' }}
+                  >
                     {openItem.type === 'Course' ? '▶ Start Course' : '▶ Open & Read'}
                   </button>
                   {openItem.pdf_available && (

@@ -2,16 +2,51 @@
 
 import React, { useState, useEffect } from 'react';
 import { C } from './Logo';
+import { supabase } from '@/lib/supabase';
+import type { Content } from '@/lib/supabase';
 
 interface UploadPopupProps {
   onOpen?: () => void;
   onDismiss?: () => void;
 }
 
+type LatestContent = Pick<Content, 'title' | 'type' | 'week' | 'premium'>;
+
+const TYPE_ICONS: Record<string, string> = {
+  Speech: '🎤',
+  Newsletter: '📮',
+  Course: '🎓',
+  Template: '📋',
+  Guide: '📖',
+  Article: '📝',
+  Resource: '📚',
+};
+
 export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
   const [visible, setVisible] = useState(false);
+  const [content, setContent] = useState<LatestContent | null>(null);
 
   useEffect(() => {
+    // Fetch the most recently published content item
+    const fetchLatest = async () => {
+      try {
+        const result = await supabase
+          .from('contents')
+          .select('title, type, week, premium')
+          .eq('status', 'published')
+          .order('published_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (result.data) setContent(result.data as LatestContent);
+      } catch {
+        // non-fatal — popup just won't show
+      }
+    };
+
+    fetchLatest();
+
+    // Show popup after 2.5s
     const t = setTimeout(() => setVisible(true), 2500);
     return () => clearTimeout(t);
   }, []);
@@ -26,7 +61,12 @@ export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
     onOpen?.();
   };
 
-  if (!visible) return null;
+  // Don't show if no content loaded or not yet visible
+  if (!visible || !content) return null;
+
+  const icon = TYPE_ICONS[content.type] ?? '📄';
+  const accessLabel = content.premium ? 'Pro' : 'Free';
+  const weekLabel = content.week ? `${content.week} · ` : '';
 
   return (
     <div
@@ -49,13 +89,19 @@ export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
           background: `linear-gradient(135deg, ${C.mustard}30, ${C.mustardDark}20)`,
           border: `1px solid ${C.mustard}40`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
-        }} aria-hidden="true">🆕</div>
+        }} aria-hidden="true">
+          {icon}
+        </div>
         <div style={{ flex: 1 }}>
-          <div style={{ color: C.mustard, fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.1em', marginBottom: 2 }}>NEW UPLOAD</div>
-          <div style={{ color: C.white, fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3 }}>
-            &quot;National Day Celebration Speech&quot; is now live
+          <div style={{ color: C.mustard, fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.1em', marginBottom: 2 }}>
+            NEW UPLOAD
           </div>
-          <div style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Week 5 · Assembly Speeches · Free</div>
+          <div style={{ color: C.white, fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3 }}>
+            &quot;{content.title}&quot; is now live
+          </div>
+          <div style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>
+            {weekLabel}{content.type}s · {accessLabel}
+          </div>
           <button
             onClick={handleOpen}
             style={{

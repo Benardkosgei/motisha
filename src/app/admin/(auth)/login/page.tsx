@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Lock, LogIn, Loader2, ArrowRight } from 'lucide-react';
-import { C, MotishaIcon } from '@/components/Logo';
+import { User, Lock, LogIn, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { C, MotishaLogo } from '@/components/Logo';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -11,6 +11,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,35 +72,19 @@ export default function AdminLoginPage() {
       >
         {/* Logo */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32, gap: 12 }}>
-          <MotishaIcon size={52} />
-          <div>
-            <div
-              style={{
-                fontFamily: "'Bebas Neue', 'Impact', sans-serif",
-                fontSize: '1.6rem',
-                letterSpacing: '0.12em',
-                background: `linear-gradient(135deg, ${C.white} 30%, ${C.tealGlow})`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textAlign: 'center',
-                lineHeight: 1,
-              }}
-            >
-              MOTISHA
-            </div>
-            <div
-              style={{
-                fontSize: '0.6rem',
-                letterSpacing: '0.2em',
-                color: C.mustard,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                textAlign: 'center',
-                marginTop: 2,
-              }}
-            >
-              Admin Dashboard
-            </div>
+          <MotishaLogo size="lg" />
+          <div
+            style={{
+              fontSize: '0.6rem',
+              letterSpacing: '0.2em',
+              color: C.mustard,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              textAlign: 'center',
+              marginTop: 2,
+            }}
+          >
+            Admin Dashboard
           </div>
         </div>
 
@@ -178,7 +163,7 @@ export default function AdminLoginPage() {
                 </span>
                 <input
                   id="admin-password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -186,7 +171,7 @@ export default function AdminLoginPage() {
                   disabled={loading}
                   style={{
                     width: '100%',
-                    padding: '11px 14px 11px 38px',
+                    padding: '11px 42px 11px 38px',
                     borderRadius: 8,
                     background: C.navyLight,
                     border: `1px solid rgba(14,165,233,0.25)`,
@@ -198,6 +183,14 @@ export default function AdminLoginPage() {
                     opacity: loading ? 0.6 : 1,
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.grayDark, padding: 2, display: 'flex', alignItems: 'center' }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 

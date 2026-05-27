@@ -62,8 +62,58 @@ export default function BookingsPage() {
   const [notes, setNotes] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Deposit recording state
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositMethod, setDepositMethod] = useState<'mpesa' | 'bank' | 'card'>('bank');
+  const [depositReceipt, setDepositReceipt] = useState('');
+  const [depositSaving, setDepositSaving] = useState(false);
+
+  function openDetail(b: Booking) {
+    setSelected(b);
+    setNotes(b.admin_notes ?? '');
+    setDepositAmount(b.deposit_amount ? String(b.deposit_amount) : '');
+    setDepositMethod(b.payment_method === 'mpesa' ? 'mpesa' : b.payment_method === 'card' ? 'card' : 'bank');
+    setDepositReceipt(b.mpesa_receipt ?? '');
+  }
+
+  async function recordDeposit() {
+    if (!selected) return;
+    const amt = Number(depositAmount);
+    if (!depositAmount || isNaN(amt) || amt <= 0) {
+      setError('Enter a valid deposit amount.');
+      return;
+    }
+    setDepositSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        deposit_amount: amt,
+        deposit_paid_at: new Date().toISOString(),
+        payment_method: depositMethod,
+        status: 'deposit_paid',
+        admin_notes: notes,
+      };
+      if (depositMethod === 'mpesa' && depositReceipt.trim()) {
+        body.mpesa_receipt = depositReceipt.trim();
+      }
+      const res = await fetch(`/api/admin/bookings/${selected.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Failed to record deposit');
+      const updated = await res.json();
+      setBookings(prev => prev.map(b => b.id === selected.id ? updated : b));
+      setSelected(updated);
+      setSuccessMsg('Deposit recorded. Status updated to Deposit Paid.');
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record deposit');
+    } finally {
+      setDepositSaving(false);
+    }
+  }
+
   const fetchBookings = useCallback(async () => {
-    setLoading(true); setError('');
     try {
       const params = new URLSearchParams({ pageSize: '100' });
       if (statusFilter !== 'all') params.set('status', statusFilter);
@@ -175,7 +225,7 @@ export default function BookingsPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-                  <button onClick={() => { setSelected(b); setNotes(b.admin_notes ?? ''); }}
+                  <button onClick={() => openDetail(b)}
                     style={{ padding: '6px 12px', borderRadius: 6, background: 'rgba(14,165,233,0.12)', color: C.teal, fontSize: '0.76rem', fontWeight: 600, border: '1px solid rgba(14,165,233,0.25)', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>
                     View
                   </button>
@@ -256,6 +306,60 @@ export default function BookingsPage() {
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Internal notes..."
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: C.navyLight, border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.82rem', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             </div>
+
+            {/* Deposit recording — for confirmed bookings without a deposit yet */}
+            {(selected.status === 'confirmed' || selected.status === 'pending') && !selected.deposit_paid_at && (
+              <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 10, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                <div style={{ color: C.success, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
+                  Record Deposit Payment
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ color: C.gray, fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>Amount ({selected.currency})</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={depositAmount}
+                      onChange={e => setDepositAmount(e.target.value)}
+                      placeholder="e.g. 5000"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 7, background: C.navyLight, border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: C.gray, fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>Payment Method</label>
+                    <select
+                      value={depositMethod}
+                      onChange={e => setDepositMethod(e.target.value as 'mpesa' | 'bank' | 'card')}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 7, background: C.navyLight, border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.82rem', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      <option value="bank">🏦 Bank Transfer</option>
+                      <option value="mpesa">📱 M-Pesa</option>
+                      <option value="card">💳 Card</option>
+                    </select>
+                  </div>
+                </div>
+                {depositMethod === 'mpesa' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ color: C.gray, fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>M-Pesa Receipt (optional)</label>
+                    <input
+                      type="text"
+                      value={depositReceipt}
+                      onChange={e => setDepositReceipt(e.target.value)}
+                      placeholder="e.g. QHX7Y2ABCD"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 7, background: C.navyLight, border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={recordDeposit}
+                  disabled={depositSaving || !depositAmount}
+                  style={{ padding: '8px 18px', borderRadius: 7, background: `${C.success}20`, color: C.success, border: `1px solid ${C.success}40`, fontWeight: 700, fontSize: '0.82rem', cursor: (depositSaving || !depositAmount) ? 'not-allowed' : 'pointer', opacity: (depositSaving || !depositAmount) ? 0.6 : 1, fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  {depositSaving ? 'Recording…' : '✓ Record Deposit'}
+                </button>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
               {selected.status === 'pending' && (

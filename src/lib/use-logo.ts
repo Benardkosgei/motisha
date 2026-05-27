@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 
 let cachedLogoUrl: string | null | undefined = undefined; // undefined = not fetched yet
 
-export function useLogo(): string | null {
+export function useLogo(): string | null | undefined {
   const [logoUrl, setLogoUrl] = useState<string | null | undefined>(cachedLogoUrl);
 
   useEffect(() => {
@@ -12,6 +12,7 @@ export function useLogo(): string | null {
       setLogoUrl(cachedLogoUrl);
       return;
     }
+
     fetch('/api/public/logo')
       .then(r => r.json())
       .then(({ url }) => {
@@ -24,7 +25,7 @@ export function useLogo(): string | null {
       });
   }, []);
 
-  return logoUrl ?? null;
+  return logoUrl;
 }
 
 // Call this after uploading a new logo so the cache is invalidated

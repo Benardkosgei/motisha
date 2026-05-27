@@ -54,6 +54,28 @@ export async function PATCH(
 
     if (body.admin_notes !== undefined) updates.admin_notes = body.admin_notes;
 
+    // Deposit recording — allows admin to manually record a bank-transfer deposit
+    if (body.deposit_amount !== undefined) {
+      const amt = Number(body.deposit_amount);
+      if (isNaN(amt) || amt < 0) {
+        return NextResponse.json({ error: 'deposit_amount must be a non-negative number' }, { status: 400 });
+      }
+      updates.deposit_amount = amt;
+    }
+    if (body.deposit_paid_at !== undefined) {
+      updates.deposit_paid_at = body.deposit_paid_at || null;
+    }
+    if (body.payment_method !== undefined) {
+      const validMethods = ['mpesa', 'bank', 'card'];
+      if (body.payment_method !== null && !validMethods.includes(body.payment_method)) {
+        return NextResponse.json({ error: `payment_method must be one of: ${validMethods.join(', ')}` }, { status: 400 });
+      }
+      updates.payment_method = body.payment_method;
+    }
+    if (body.mpesa_receipt !== undefined) {
+      updates.mpesa_receipt = body.mpesa_receipt || null;
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }

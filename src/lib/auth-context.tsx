@@ -10,6 +10,7 @@ export interface Profile {
   email: string;
   name: string;
   county: string;
+  job_title?: string;
   /** Staff (`admin`) vs registered teacher (`user`). Not a subscription label. */
   role: AccountRole;
   /** Product plan: free, pro (individual), or school bundle. */
@@ -41,11 +42,14 @@ interface AuthContextValue {
     password: string,
     name: string,
     phone: string,
-    referredBy?: string
+    referredBy?: string,
+    county?: string,
+    jobTitle?: string
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isOnTrial: () => boolean;
+  trialExpired: () => boolean;
   trialDaysLeft: () => number;
   hasActiveSubscription: () => boolean;
 }
@@ -131,7 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     name: string,
     phone: string,
-    referredBy?: string
+    referredBy?: string,
+    county?: string,
+    jobTitle?: string
   ) => {
     // Normalize phone
     let normalizedPhone = phone.trim().replace(/\s+/g, '');
@@ -159,11 +165,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user) {
       await supabase
         .from('profiles')
-        .update({ phone: normalizedPhone })
+        .update({
+          phone: normalizedPhone,
+          ...(county ? { county } : {}),
+          ...(jobTitle ? { job_title: jobTitle } : {}),
+        })
         .eq('id', data.user.id);
 
-      // Start trial
-      await supabase.rpc('start_trial', { p_user_id: data.user.id });
+      // Start trial — retry once if the profile row isn't committed yet
+      const startTrial = async () => {
+        const { error: rpcError } = await supabase.rpc('start_trial', { p_user_id: data.user!.id });
+        if (rpcError) {
+          console.warn('[auth] start_trial failed, retrying in 1s:', rpcError.message);
+          await new Promise((r) => setTimeout(r, 1000));
+          const { error: retryError } = await supabase.rpc('start_trial', { p_user_id: data.user!.id });
+          if (retryError) console.error('[auth] start_trial retry failed:', retryError.message);
+        }
+      };
+      await startTrial();
+
+      // Send welcome email (fire-and-forget — don't block sign-up on email failure)
+      fetch('/api/email/welcome', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': process.env.NEXT_PUBLIC_EMAIL_INTERNAL_SECRET ?? '',
+        },
+        body: JSON.stringify({ userId: data.user!.id }),
+      }).catch((e) => console.warn('[auth] welcome email fire failed:', e));
     }
 
     return { error: null };
@@ -178,6 +207,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!profile.trial_ends_at) return false;
     if (profile.subscription_tier !== 'free') return false;
     return new Date(profile.trial_ends_at) > new Date();
+  };
+
+  /**
+   * True when the user had a trial but it has now expired and they haven't subscribed.
+   * Used to show an "your trial has expired" banner.
+   */
+  const trialExpired = (): boolean => {
+    if (!profile) return false;
+    if (!profile.trial_started_at) return false; // never had a trial
+    if (profile.subscription_tier !== 'free') return false; // already subscribed
+    if (!profile.trial_ends_at) return false;
+    return new Date(profile.trial_ends_at) <= new Date();
   };
 
   const trialDaysLeft = (): number => {
@@ -201,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       session, user, profile, loading,
       signIn, signUp, signOut, refreshProfile,
-      isOnTrial, trialDaysLeft, hasActiveSubscription,
+      isOnTrial, trialExpired, trialDaysLeft, hasActiveSubscription,
     }}>
       {children}
     </AuthContext.Provider>

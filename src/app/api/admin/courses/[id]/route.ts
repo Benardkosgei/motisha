@@ -67,12 +67,12 @@ export async function PATCH(
       body.title = body.title.trim();
     }
 
-    // Validate modules if provided
-    if (body.modules !== undefined) {
+    // Validate modules if provided (allow 0 — managed via curriculum tab)
+    if (body.modules !== undefined && body.modules !== null) {
       const modulesNum = parseInt(body.modules, 10);
-      if (isNaN(modulesNum) || modulesNum <= 0) {
+      if (isNaN(modulesNum) || modulesNum < 0) {
         return NextResponse.json(
-          { error: 'Modules must be a number greater than 0' },
+          { error: 'Modules must be a non-negative number' },
           { status: 400 }
         );
       }
@@ -81,15 +81,12 @@ export async function PATCH(
 
     // Build update payload — only include fields that were sent
     const allowedFields = [
-      'title',
-      'description',
-      'icon',
-      'premium',
-      'week',
-      'modules',
-      'publish_at',
-      'status',
-      'published_at',
+      'title', 'description', 'icon', 'premium', 'week', 'modules',
+      'publish_at', 'status', 'published_at',
+      // Expanded fields
+      'thumbnail_url', 'trailer_url', 'level', 'language', 'duration_hours',
+      'category', 'objectives', 'requirements', 'target_audience',
+      'certificate', 'access_tier',
     ];
 
     const updateData: Record<string, unknown> = {};
@@ -97,6 +94,15 @@ export async function PATCH(
       if (field in body) {
         updateData[field] = body[field];
       }
+    }
+
+    // Coerce numeric fields that may arrive as strings
+    if (updateData.duration_hours !== undefined && updateData.duration_hours !== null && updateData.duration_hours !== '') {
+      updateData.duration_hours = typeof updateData.duration_hours === 'number'
+        ? updateData.duration_hours
+        : parseFloat(String(updateData.duration_hours));
+    } else if (updateData.duration_hours === '') {
+      updateData.duration_hours = null;
     }
 
     // If publishing now, set published_at
@@ -125,8 +131,12 @@ export async function PATCH(
     return NextResponse.json(data);
   } catch (error) {
     console.error('[admin/courses/[id]] PATCH error:', error);
+    const message = error instanceof Error ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as { message: unknown }).message)
+        : 'Failed to update course';
     return NextResponse.json(
-      { error: 'Failed to update course' },
+      { error: message },
       { status: 500 }
     );
   }

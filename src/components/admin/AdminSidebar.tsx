@@ -88,7 +88,9 @@ function SidebarContent({
 
       {/* Branding */}
       <div style={{ padding: '20px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        {logoUrl ? (
+        {logoUrl === undefined ? (
+          <div style={{ width: 32, height: 32 }} />
+        ) : logoUrl ? (
           <img
             src={logoUrl}
             alt="Motisha logo"

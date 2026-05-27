@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // ─── Daraja API helpers ───────────────────────────────────────────────────────
 
@@ -13,13 +8,16 @@ async function getDarajaToken(): Promise<string> {
   const consumerSecret = process.env.MPESA_CONSUMER_SECRET!;
   const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
-  const res = await fetch(
-    'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-    {
-      headers: { Authorization: `Basic ${credentials}` },
-      cache: 'no-store',
-    }
-  );
+  // Use the correct base URL depending on environment
+  const isDev = process.env.MPESA_ENV !== 'production';
+  const tokenUrl = isDev
+    ? 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+    : 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+
+  const res = await fetch(tokenUrl, {
+    headers: { Authorization: `Basic ${credentials}` },
+    cache: 'no-store',
+  });
 
   if (!res.ok) throw new Error('Failed to get Daraja token');
   const data = await res.json();
@@ -53,11 +51,12 @@ function getTimestamp(): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { phone, amount, package: pkg, billing } = body as {
+    const { phone, amount, package: pkg, billing, userId } = body as {
       phone: string;
       amount: number;
       package: 'individual' | 'admin';
       billing: 'monthly' | 'termly' | 'yearly';
+      userId?: string;
     };
 
     if (!phone || !amount || !pkg || !billing) {
@@ -116,10 +115,19 @@ export async function POST(req: NextRequest) {
     // The callback will complete it
     const checkoutId = stkData.CheckoutRequestID as string;
 
-    // Store pending payment in a temp table or system_settings for callback lookup
+    // Store pending payment with user_id so the callback can link it directly
+    // without relying solely on phone number lookup (which can fail on format mismatch)
     await supabaseAdmin.from('system_settings').upsert({
       key: `mpesa_pending_${checkoutId}`,
-      value: { checkoutId, phone: formattedPhone, amount, package: pkg, billing, timestamp: new Date().toISOString() },
+      value: {
+        checkoutId,
+        phone: formattedPhone,
+        amount,
+        package: pkg,
+        billing,
+        userId: userId ?? null,
+        timestamp: new Date().toISOString(),
+      },
     }, { onConflict: 'key' });
 
     return NextResponse.json({

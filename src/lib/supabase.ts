@@ -17,26 +17,68 @@ export interface User {
   email: string
   name: string
   county: string
+  /** Account type: registered teacher vs staff. NOT a subscription label. */
   role: 'user' | 'admin'
+  /** Product plan: free, pro (individual), or school bundle. */
   subscription_tier: 'free' | 'pro' | 'school'
+  /** Dashboard permission level — only set when role = 'admin'. */
+  admin_role?: 'super_admin' | 'editor' | null
   status?: 'active' | 'suspended'
   points: number
   referral_code: string
   downloads_used: number
   downloads_limit: number
+  phone?: string | null
+  phone_verified?: boolean
+  trial_started_at?: string | null
+  trial_ends_at?: string | null
+  subscription_package?: 'individual' | 'admin' | null
+  subscription_billing?: 'monthly' | 'termly' | 'yearly' | null
+  subscription_expires_at?: string | null
+  referral_commission_balance?: number
   created_at: string
 }
+
+export type ContentType =
+  | 'Speech'
+  | 'Newsletter'
+  | 'Course'
+  | 'Template'
+  | 'Guide'
+  | 'Resource'
+  | 'Article'
 
 export interface Content {
   id: string
   title: string
-  type: 'Speech' | 'Newsletter' | 'Course' | 'Template' | 'Guide'
+  type: ContentType
   icon: string
-  description: string
+  description: string | null
+  /** Rich-text HTML body — used by Article type. */
+  body?: string | null
   premium: boolean
   pdf_available: boolean
-  week: string
-  modules?: number
+  week: string | null
+  modules: number
+  file_url?: string | null
+  /** draft | published */
+  status?: string
+  publish_at?: string | null
+  published_at?: string | null
+  // Course-expansion fields (migration 012)
+  thumbnail_url?: string | null
+  trailer_url?: string | null
+  level?: 'beginner' | 'intermediate' | 'advanced' | 'all' | null
+  language?: string
+  duration_hours?: number | null
+  category?: string | null
+  objectives?: string[]
+  requirements?: string[]
+  target_audience?: string | null
+  certificate?: boolean
+  rating?: number | null
+  enrollments?: number
+  // Virtual / joined fields
   progress?: number
   created_at: string
 }

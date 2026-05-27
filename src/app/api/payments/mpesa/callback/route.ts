@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // Billing period → days
 const BILLING_DAYS: Record<string, number> = {
@@ -81,26 +76,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     }
 
+    // ── Idempotency: skip if this checkout ID was already processed ───────────
+    const { data: existing } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id')
+      .eq('mpesa_checkout_id', CheckoutRequestID)
+      .maybeSingle();
+
+    if (existing) {
+      // Already processed — clean up pending key and return success
+      await supabaseAdmin
+        .from('system_settings')
+        .delete()
+        .eq('key', `mpesa_pending_${CheckoutRequestID}`);
+      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }
+
     const pending = pendingData.value as {
       phone: string;
       amount: number;
       package: 'individual' | 'admin';
       billing: 'monthly' | 'termly' | 'yearly';
+      userId?: string | null;
     };
 
-    const normalizedPhone = '+' + String(phoneRaw).replace(/^\+/, '');
-    const { data: profileData } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('phone', normalizedPhone)
-      .single();
+    // Resolve user: prefer stored userId, fall back to phone lookup
+    let userId: string | null = pending.userId ?? null;
 
-    if (!profileData) {
-      console.warn('[mpesa callback] No profile found for phone', normalizedPhone);
-      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    if (!userId) {
+      // Normalize phone: Safaricom returns 254XXXXXXXXX (no plus sign)
+      const rawPhoneStr = String(phoneRaw).replace(/^\+/, '');
+      const normalizedPhone = rawPhoneStr.startsWith('254')
+        ? '+' + rawPhoneStr
+        : '+254' + rawPhoneStr.replace(/^0/, '');
+
+      const { data: profileData } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .single();
+
+      if (!profileData) {
+        console.warn('[mpesa callback] No profile found for phone', normalizedPhone, '— checkout', CheckoutRequestID);
+        // Clean up pending record so it doesn't linger
+        await supabaseAdmin.from('system_settings').delete().eq('key', `mpesa_pending_${CheckoutRequestID}`);
+        return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+      }
+      userId = profileData.id;
     }
-
-    const userId = profileData.id;
     const days = BILLING_DAYS[pending.billing] ?? 30;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 

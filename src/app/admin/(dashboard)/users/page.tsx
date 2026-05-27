@@ -139,11 +139,18 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Server-side filter state (applied on fetch)
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // User detail modal
+  const [detailUser, setDetailUser] = useState<UserProfile | null>(null);
+  const [detailData, setDetailData] = useState<{ referrals: unknown[]; courses: unknown[] } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const [actionUser, setActionUser] = useState<{ user: UserProfile; type: 'suspend' | 'reactivate' } | null>(null);
   const [roleUser, setRoleUser] = useState<UserProfile | null>(null);
@@ -152,15 +159,17 @@ export default function UsersPage() {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchUsers = useCallback(async (s: string, t: string, st: string) => {
+  const fetchUsers = useCallback(async (s: string, t: string, st: string, pg = 1) => {
     setLoading(true); setError('');
     try {
-      const params = new URLSearchParams({ page: '1', pageSize: '1000', search: s, tier: t, status: st });
+      const params = new URLSearchParams({ page: String(pg), pageSize: '20', search: s, tier: t, status: st });
       const res = await fetch(`/api/admin/users?${params}`);
       if (!res.ok) throw new Error('Failed to fetch users');
       const data: UsersResponse = await res.json();
       setUsers(data.users);
       setTotal(data.total);
+      setTotalPages(data.totalPages);
+      setPage(pg);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
@@ -168,12 +177,12 @@ export default function UsersPage() {
     }
   }, []);
 
-  useEffect(() => { fetchUsers(search, tierFilter, statusFilter); }, [fetchUsers, tierFilter, statusFilter]);
+  useEffect(() => { fetchUsers(search, tierFilter, statusFilter, 1); }, [fetchUsers, tierFilter, statusFilter]);
 
   function handleSearchChange(val: string) {
     setSearch(val);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => fetchUsers(val, tierFilter, statusFilter), 350);
+    searchTimeout.current = setTimeout(() => fetchUsers(val, tierFilter, statusFilter, 1), 350);
   }
 
   async function handleStatusChange(user: UserProfile, newStatus: 'active' | 'suspended') {
@@ -266,6 +275,10 @@ export default function UsersPage() {
         const isActive = (user.status ?? 'active') === 'active';
         return (
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => openDetail(user)}
+              style={{ padding: '5px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', color: C.gray, fontSize: '0.72rem', fontWeight: 600, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", whiteSpace: 'nowrap' }}>
+              View
+            </button>
             <button type="button" onClick={() => setRoleUser(user)}
               style={{ padding: '5px 10px', borderRadius: 6, background: `rgba(14,165,233,0.12)`, color: C.teal, fontSize: '0.72rem', fontWeight: 600, border: `1px solid rgba(14,165,233,0.25)`, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", whiteSpace: 'nowrap' }}>
               Plan
@@ -290,6 +303,19 @@ export default function UsersPage() {
   // Extra toolbar controls passed into AdminDataTable
   const toolbar = (
     <>
+      <input
+        type="search"
+        value={search}
+        onChange={e => handleSearchChange(e.target.value)}
+        placeholder="Search by name or email…"
+        aria-label="Search users"
+        style={{
+          padding: '8px 12px', borderRadius: 8, background: C.navyLight,
+          border: `1px solid rgba(14,165,233,0.2)`, color: C.white,
+          fontSize: '0.82rem', fontFamily: "'DM Sans',sans-serif", minWidth: 220,
+          outline: 'none',
+        }}
+      />
       <select value={tierFilter} onChange={e => { setTierFilter(e.target.value); }} style={selectStyle} aria-label="Filter by plan">
         <option value="all">All plans</option>
         <option value="free">Free</option>
@@ -303,6 +329,20 @@ export default function UsersPage() {
       </select>
     </>
   );
+
+  async function openDetail(user: UserProfile) {
+    setDetailUser(user);
+    setDetailData(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`);
+      if (res.ok) {
+        const d = await res.json();
+        setDetailData({ referrals: d.referrals ?? [], courses: d.courses ?? [] });
+      }
+    } catch { /* non-fatal */ }
+    finally { setDetailLoading(false); }
+  }
 
   return (
     <div>
@@ -321,7 +361,7 @@ export default function UsersPage() {
       {error && (
         <div role="alert" style={{ padding: '10px 16px', borderRadius: 8, background: `${C.danger}18`, border: `1px solid ${C.danger}40`, color: C.danger, fontSize: '0.85rem', marginBottom: 16 }}>
           {error}
-          <button type="button" onClick={() => fetchUsers(search, tierFilter, statusFilter)}
+          <button type="button" onClick={() => fetchUsers(search, tierFilter, statusFilter, page)}
             style={{ marginLeft: 12, background: 'none', border: 'none', color: C.teal, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, textDecoration: 'underline', padding: 0 }}>
             Retry
           </button>
@@ -332,25 +372,44 @@ export default function UsersPage() {
         columns={columns}
         data={users}
         loading={loading}
-        searchPlaceholder="Search by name or email…"
+        searchPlaceholder=""
         toolbar={toolbar}
-        // Server-side search overrides the built-in global filter for this page
-        hideSearch={false}
+        hideSearch={true}
         emptyMessage="No users found."
         defaultPageSize={20}
       />
 
-      {/* The search input in AdminDataTable does client-side filtering.
-          For users we also want server-side search — wire the two together
-          via a hidden effect that watches the table's global filter. */}
-      <_UserSearchSync onSearch={handleSearchChange} />
+      {/* Server-side pagination controls */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 20 }}>
+          <button
+            type="button"
+            onClick={() => fetchUsers(search, tierFilter, statusFilter, page - 1)}
+            disabled={page <= 1 || loading}
+            style={{ padding: '7px 16px', borderRadius: 8, background: C.navyLight, color: C.white, border: `1px solid rgba(14,165,233,0.2)`, fontWeight: 600, fontSize: '0.82rem', cursor: (page <= 1 || loading) ? 'not-allowed' : 'pointer', opacity: (page <= 1 || loading) ? 0.5 : 1, fontFamily: "'DM Sans',sans-serif" }}
+          >
+            ← Prev
+          </button>
+          <span style={{ color: C.gray, fontSize: '0.82rem' }}>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => fetchUsers(search, tierFilter, statusFilter, page + 1)}
+            disabled={page >= totalPages || loading}
+            style={{ padding: '7px 16px', borderRadius: 8, background: C.navyLight, color: C.white, border: `1px solid rgba(14,165,233,0.2)`, fontWeight: 600, fontSize: '0.82rem', cursor: (page >= totalPages || loading) ? 'not-allowed' : 'pointer', opacity: (page >= totalPages || loading) ? 0.5 : 1, fontFamily: "'DM Sans',sans-serif" }}
+          >
+            Next →
+          </button>
+        </div>
+      )}
 
       {actionUser && (
         <ConfirmModal
           title={actionUser.type === 'suspend' ? 'Suspend User' : 'Reactivate User'}
           message={actionUser.type === 'suspend'
-            ? <span>Suspend <strong style={{ color: C.white }}>{actionUser.user.name}</strong>? They won't be able to sign in.</span>
-            : <span>Reactivate <strong style={{ color: C.white }}>{actionUser.user.name}</strong>? They'll regain access.</span>}
+            ? <span>Suspend <strong style={{ color: C.white }}>{actionUser.user.name}</strong>? They won&apos;t be able to sign in.</span>
+            : <span>Reactivate <strong style={{ color: C.white }}>{actionUser.user.name}</strong>? They&apos;ll regain access.</span>}
           confirmLabel={actionUser.type === 'suspend' ? 'Suspend' : 'Reactivate'}
           confirmColor={actionUser.type === 'suspend' ? C.danger : C.success}
           onConfirm={() => handleStatusChange(actionUser.user, actionUser.type === 'suspend' ? 'suspended' : 'active')}
@@ -366,17 +425,107 @@ export default function UsersPage() {
           onClose={() => setRoleUser(null)}
         />
       )}
+
+      {/* User detail modal */}
+      {detailUser && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Details for ${detailUser.name}`}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: 16 }}
+          onClick={() => setDetailUser(null)}
+        >
+          <div
+            style={{ background: C.navyMid, border: `1px solid rgba(14,165,233,0.2)`, borderRadius: 16, padding: 28, maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ color: C.white, margin: 0, fontSize: '1rem', fontWeight: 700 }}>User Details</h3>
+              <button onClick={() => setDetailUser(null)} style={{ background: 'none', border: 'none', color: C.gray, cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+
+            {/* Profile summary */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '14px 16px', borderRadius: 10, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.12)' }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: `linear-gradient(135deg,${C.teal},${C.turquoise})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.9rem', color: C.navy, flexShrink: 0 }}>
+                {detailUser.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?'}
+              </div>
+              <div>
+                <div style={{ color: C.white, fontWeight: 700, fontSize: '0.95rem' }}>{detailUser.name}</div>
+                <div style={{ color: C.gray, fontSize: '0.78rem' }}>{detailUser.email}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <PlanBadge tier={detailUser.subscription_tier} />
+                  <StatusBadge status={detailUser.status ?? 'active'} />
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+              {[
+                { label: 'Points', value: String(detailUser.points ?? 0), color: C.mustard },
+                { label: 'Downloads', value: `${detailUser.downloads_used ?? 0} / ${detailUser.downloads_limit ?? 0}`, color: C.teal },
+                { label: 'County', value: detailUser.county || '—', color: C.offWhite },
+              ].map(item => (
+                <div key={item.label} style={{ padding: '10px 12px', borderRadius: 8, background: C.navyLight, textAlign: 'center' }}>
+                  <div style={{ color: item.color, fontWeight: 700, fontSize: '0.9rem' }}>{item.value}</div>
+                  <div style={{ color: C.gray, fontSize: '0.68rem', marginTop: 2 }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {detailLoading ? (
+              <div style={{ color: C.gray, textAlign: 'center', padding: '20px 0' }}>Loading details…</div>
+            ) : detailData ? (
+              <>
+                {/* Referral history */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ color: C.gray, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Referrals ({detailData.referrals.length})
+                  </div>
+                  {detailData.referrals.length === 0 ? (
+                    <div style={{ color: C.grayDark, fontSize: '0.8rem' }}>No referrals yet.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {(detailData.referrals as Array<{ id: string; points_earned: number; created_at: string }>).slice(0, 5).map(r => (
+                        <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 6, background: C.navyLight, fontSize: '0.78rem' }}>
+                          <span style={{ color: C.offWhite }}>+{r.points_earned} pts</span>
+                          <span style={{ color: C.gray }}>{new Date(r.created_at).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Course progress */}
+                <div>
+                  <div style={{ color: C.gray, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Course Progress ({detailData.courses.length})
+                  </div>
+                  {detailData.courses.length === 0 ? (
+                    <div style={{ color: C.grayDark, fontSize: '0.8rem' }}>No courses started.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {(detailData.courses as Array<{ id: string; content_id: string; progress: number; completed_modules: number }>).slice(0, 5).map(c => (
+                        <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 6, background: C.navyLight, fontSize: '0.78rem' }}>
+                          <span style={{ color: C.offWhite }}>{c.completed_modules} modules done</span>
+                          <span style={{ color: C.teal, fontWeight: 700 }}>{c.progress}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setDetailUser(null)}
+                style={{ padding: '9px 20px', borderRadius: 8, background: C.navyLight, color: C.white, border: `1px solid rgba(14,165,233,0.3)`, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-// Small helper: the AdminDataTable owns its own search input state.
-// For users we want to also trigger a server-side fetch when the user types.
-// We do this by rendering a hidden input that mirrors the search and debounces.
-function _UserSearchSync({ onSearch }: { onSearch: (v: string) => void }) {
-  // This component intentionally renders nothing — the search sync
-  // is handled by the debounced handleSearchChange in the parent.
-  // The AdminDataTable's built-in global filter handles client-side
-  // filtering of the already-fetched page of results.
-  return null;
 }

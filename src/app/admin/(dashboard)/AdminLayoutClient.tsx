@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { C } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import type { AdminRole } from '@/lib/admin-session';
 
 interface AdminLayoutClientProps {
@@ -30,8 +31,8 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
       style={{
         display: 'flex',
         minHeight: '100vh',
-        background: C.navy,
-        color: C.white,
+        background: 'var(--bg)',
+        color: 'var(--text)',
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
@@ -50,8 +51,8 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
         <header
           style={{
             height: 60,
-            background: C.navyMid,
-            borderBottom: `1px solid rgba(14,165,233,0.15)`,
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             padding: '0 24px',
@@ -90,7 +91,7 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
             <span
               style={{
                 fontSize: '0.75rem',
-                color: C.gray,
+                color: 'var(--muted)',
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
                 fontWeight: 600,
@@ -102,6 +103,7 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
 
           {/* Admin avatar + role badge */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ThemeToggle showButton />
             {adminRole === 'editor' && (
               <span
                 style={{
@@ -120,7 +122,7 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
               </span>
             )}
             <span
-              style={{ color: C.white, fontSize: '0.82rem', fontWeight: 600, display: 'none' }}
+              style={{ color: 'var(--text)', fontSize: '0.82rem', fontWeight: 600, display: 'none' }}
               className="admin-topbar-name"
             >
               {adminUsername || 'Admin'}

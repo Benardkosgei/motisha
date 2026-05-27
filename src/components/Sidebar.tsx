@@ -34,7 +34,22 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
       </div>
 
       {/* User card */}
-      <div style={{ margin: '0 12px 16px', padding: '12px', borderRadius: 12, background: `linear-gradient(135deg, ${C.teal}15, ${C.turquoise}08)`, border: `1px solid ${C.teal}25` }}>
+      <button
+        type="button"
+        onClick={() => { onNav('profile'); setMobileOpen(false); }}
+        aria-label="Open profile settings"
+        style={{
+          // width: '100%',
+          margin: '0 12px 16px',
+          padding: '12px',
+          borderRadius: 12,
+          background: `linear-gradient(135deg, ${C.teal}15, ${C.turquoise}08)`,
+          border: `1px solid ${C.teal}25`,
+          textAlign: 'left',
+          cursor: 'pointer',
+          color: 'inherit',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg, ${C.teal}, ${C.mustard})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.8rem', color: C.navy, flexShrink: 0 }}>
             {initials}
@@ -51,20 +66,10 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
             </div>
           </div>
         </div>
-        {profile?.subscription_tier === 'free' && (
-          <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '6px 10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ color: C.gray, fontSize: '0.65rem' }}>Monthly usage</span>
-              <span style={{ color: C.mustard, fontSize: '0.65rem', fontWeight: 700 }}>
-                {profile.downloads_used} / {profile.downloads_limit} free
-              </span>
-            </div>
-            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)' }}>
-              <div style={{ width: `${usagePercent}%`, height: '100%', borderRadius: 2, background: `linear-gradient(90deg, ${C.teal}, ${C.mustard})` }} />
-            </div>
-          </div>
-        )}
-      </div>
+        <div style={{ marginTop: 12, fontSize: '0.72rem', color: C.white, opacity: 0.9, fontWeight: 600 }}>
+          Manage profile settings
+        </div>
+      </button>
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '0 10px' }} aria-label="Main navigation">
@@ -182,6 +187,8 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
           position: 'sticky',
           top: 0,
           height: '100vh',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
         }}
         className="sidebar-desktop"
       >

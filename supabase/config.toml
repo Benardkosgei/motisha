@@ -24,7 +24,7 @@ file_size_limit = "50MiB"
 
 [auth]
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://localhost:3000"]
+additional_redirect_urls = ["https://localhost:3000", "http://localhost:3000/auth/reset-password", "https://motisha.co.ke/auth/reset-password"]
 jwt_expiry = 3600
 enable_signup = true
 

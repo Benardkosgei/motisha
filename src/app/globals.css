@@ -4,39 +4,50 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-  --navy: #0A1628;
-  --navy-mid: #0D1F3C;
-  --navy-light: #152847;
-  --teal: #0EA5E9;
-  --teal-dark: #0369A1;
-  --teal-glow: #38BDF8;
-  --turquoise: #06B6D4;
-  --mustard: #F5A623;
-  --mustard-light: #FBBF24;
-  --mustard-dark: #D97706;
-  --white: #F8FAFC;
-  --off-white: #E2E8F0;
-  --gray: #94A3B8;
-  --gray-dark: #475569;
+  --bg: #0A1628;
+  --surface: #0D1F3C;
+  --surface-soft: #152847;
+  --text: #F8FAFC;
+  --muted: #94A3B8;
+  --border: rgba(14, 165, 233, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --primary: #0EA5E9;
+  --accent: #F5A623;
   --success: #10B981;
   --danger: #EF4444;
 }
 
-@theme inline {
-  --color-navy: var(--navy);
-  --color-navy-mid: var(--navy-mid);
-  --color-navy-light: var(--navy-light);
-  --color-teal: var(--teal);
-  --color-teal-dark: var(--teal-dark);
-  --color-teal-glow: var(--teal-glow);
-  --color-turquoise: var(--turquoise);
-  --color-mustard: var(--mustard);
-  --color-mustard-light: var(--mustard-light);
-  --color-mustard-dark: var(--mustard-dark);
-  --color-success: var(--success);
-  --color-danger: var(--danger);
-  --font-bebas: 'Bebas Neue', 'Impact', sans-serif;
-  --font-dm-sans: 'DM Sans', 'Segoe UI', sans-serif;
+html[data-theme='light'] {
+  color-scheme: light;
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
+  --surface-soft: #F1F5F9;
+  --text: #0F172A;
+  --muted: #64748B;
+  --border: rgba(148, 163, 184, 0.24);
+  --border-strong: rgba(15, 23, 42, 0.12);
+  --shadow: rgba(15, 23, 42, 0.08);
+  --primary: #0EA5E9;
+  --accent: #F59E0B;
+  --success: #10B981;
+  --danger: #DC2626;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0A1628;
+  --surface: #0D1F3C;
+  --surface-soft: #152847;
+  --text: #F8FAFC;
+  --muted: #94A3B8;
+  --border: rgba(14, 165, 233, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --primary: #0EA5E9;
+  --accent: #F5A623;
+  --success: #10B981;
+  --danger: #EF4444;
 }
 
 * {
@@ -47,13 +58,31 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--bg);
 }
 
 body {
-  background: var(--navy);
-  color: var(--white);
+  background: var(--bg);
+  color: var(--text);
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
   min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+button {
+  font-family: 'DM Sans', sans-serif;
+}
+
+input, textarea, select {
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--muted);
 }
 
 ::-webkit-scrollbar {
@@ -66,7 +95,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(14, 165, 233, 0.2);
+  background: rgb(245, 166, 35);
   border-radius: 4px;
 }
 

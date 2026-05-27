@@ -54,7 +54,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, icon, premium, week, modules, publish_at, status } = body;
+    const {
+      title, description, icon, premium, week, modules, publish_at, status,
+      thumbnail_url, trailer_url, level, language, duration_hours, category,
+      objectives, requirements, target_audience, certificate, access_tier,
+    } = body;
 
     // Validate required fields
     if (!title || typeof title !== 'string' || title.trim() === '') {
@@ -64,14 +68,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate modules > 0
-    const modulesNum = parseInt(modules, 10);
-    if (!modules || isNaN(modulesNum) || modulesNum <= 0) {
-      return NextResponse.json(
-        { error: 'Modules must be a number greater than 0' },
-        { status: 400 }
-      );
-    }
+    // modules is now optional at creation (managed via curriculum tab)
+    const modulesNum = modules !== undefined && modules !== null
+      ? (typeof modules === 'number' ? modules : parseInt(String(modules), 10))
+      : 0;
 
     // Prepare insert data
     const insertData: Record<string, unknown> = {
@@ -81,9 +81,23 @@ export async function POST(request: NextRequest) {
       icon: icon || null,
       premium: premium === true,
       week: week || null,
-      modules: modulesNum,
+      modules: modulesNum >= 0 ? modulesNum : 0,
       status: status || 'draft',
       publish_at: publish_at || null,
+      // Expanded fields
+      thumbnail_url: thumbnail_url || null,
+      trailer_url: trailer_url || null,
+      level: level || null,
+      language: language || 'English',
+      duration_hours: duration_hours !== undefined && duration_hours !== null && duration_hours !== ''
+        ? (typeof duration_hours === 'number' ? duration_hours : parseFloat(String(duration_hours)))
+        : null,
+      category: category || null,
+      objectives: Array.isArray(objectives) ? objectives : [],
+      requirements: Array.isArray(requirements) ? requirements : [],
+      target_audience: target_audience || null,
+      certificate: certificate === true,
+      access_tier: access_tier || 'pro',
     };
 
     // If status is 'published' and no publish_at, set it to now
@@ -103,8 +117,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('[admin/courses] POST error:', error);
+    const message = error instanceof Error ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as { message: unknown }).message)
+        : 'Failed to create course';
     return NextResponse.json(
-      { error: 'Failed to create course' },
+      { error: message },
       { status: 500 }
     );
   }

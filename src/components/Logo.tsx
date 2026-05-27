@@ -63,6 +63,11 @@ export function MotishaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   const imgHeight = size === 'lg' ? 52 : size === 'sm' ? 28 : 36;
   const gap = size === 'lg' ? 14 : size === 'sm' ? 8 : 10;
 
+  // While the logo is loading, render a blank placeholder to avoid flashing the fallback icon.
+  if (logoUrl === undefined) {
+    return <div style={{ width: imgHeight, height: imgHeight, display: 'block' }} />;
+  }
+
   // If a custom logo has been uploaded, show it instead of the SVG icon + text
   if (logoUrl) {
     return (

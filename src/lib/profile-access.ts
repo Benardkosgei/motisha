@@ -1,6 +1,11 @@
 /**
  * Account role (`profiles.role`): registered teacher vs staff dashboard access.
  * Subscription tier (`profiles.subscription_tier`): free / pro / school product access.
+ *
+ * Trial rules:
+ *  - Trial users are `free` tier but get access to premium speeches and newsletters.
+ *  - Courses remain locked during trial (intentional — courses are the paid upsell).
+ *  - Pass `onTrial = true` (from `isOnTrial()` in auth-context) to unlock trial content.
  */
 
 export type SubscriptionTier = 'free' | 'pro' | 'school';
@@ -17,23 +22,40 @@ export function isPaidSubscriptionTier(
 // ---------------------------------------------------------------------------
 
 /**
- * Can the user access premium content?
- * Pro and school subscribers can; free users cannot (unless on trial — checked separately).
+ * Can the user access premium content (speeches, resources, templates)?
+ * Pro and school subscribers always can.
+ * Trial users also get access — pass `onTrial = true` from `isOnTrial()`.
  */
 export function canAccessPremiumContent(
-  tier: SubscriptionTier | undefined | null
+  tier: SubscriptionTier | undefined | null,
+  onTrial = false
 ): boolean {
-  return tier === 'pro' || tier === 'school';
+  if (tier === 'pro' || tier === 'school') return true;
+  return onTrial; // trial grants premium content access (but not courses)
 }
 
 /**
  * Can the user access newsletters?
- * Newsletters are school-tier only.
+ * School-tier subscribers always can.
+ * Trial users also get access — pass `onTrial = true` from `isOnTrial()`.
  */
 export function canAccessNewsletters(
+  tier: SubscriptionTier | undefined | null,
+  onTrial = false
+): boolean {
+  if (tier === 'school') return true;
+  return onTrial; // trial grants newsletter access
+}
+
+/**
+ * Can the user access courses?
+ * Courses are locked during trial — this is intentional.
+ * Only paid subscribers (pro / school) can access courses.
+ */
+export function canAccessCourses(
   tier: SubscriptionTier | undefined | null
 ): boolean {
-  return tier === 'school';
+  return tier === 'pro' || tier === 'school';
 }
 
 /**

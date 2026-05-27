@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { C } from './Logo';
+import { useAuth } from '@/lib/auth-context';
 import type { Profile } from '@/lib/auth-context';
 import type { NavItem } from '@/lib/data';
+import { usePublicSettings } from '@/lib/use-public-settings';
 
 interface PricingTabProps {
   profile: Profile | null;
@@ -13,10 +15,42 @@ interface PricingTabProps {
 type BillingPeriod = 'monthly' | 'termly' | 'yearly';
 type PackageType = 'individual' | 'admin';
 
-const PRICES: Record<PackageType, Record<BillingPeriod, number>> = {
+// Fallback prices shown while loading or if the API fails
+const FALLBACK_PRICES: Record<PackageType, Record<BillingPeriod, number>> = {
   individual: { monthly: 1500, termly: 5000, yearly: 12000 },
   admin:      { monthly: 6500, termly: 22500, yearly: 60000 },
 };
+
+// Fallback features shown while loading or if the API fails
+const FALLBACK_FEATURES: Record<PackageType, string[]> = {
+  individual: [
+    'All assembly speeches & newsletters',
+    'Full course library',
+    'Unlimited downloads',
+    'PDF + Word formats',
+    'Weekly new content',
+    'Resources library',
+    'Referral commission earnings',
+  ],
+  admin: [
+    'Up to 5 staff accounts',
+    'Principal, Deputy, Senior Teacher, DoS, HoD G&C',
+    'All individual features for each account',
+    'School-wide access',
+    'Usage analytics',
+    'Priority support',
+    'Referral commission earnings (20%)',
+  ],
+};
+
+interface DbPlan {
+  id: string;
+  package: PackageType;
+  billing: BillingPeriod;
+  price_kes: number;
+  max_accounts: number;
+  features: string[];
+}
 
 const BILLING_LABELS: Record<BillingPeriod, string> = {
   monthly: 'Monthly',
@@ -30,35 +64,17 @@ const BILLING_SAVINGS: Record<BillingPeriod, string | null> = {
   yearly: 'Save ~33%',
 };
 
-const INDIVIDUAL_FEATURES = [
-  'All assembly speeches & newsletters',
-  'Full course library',
-  'Unlimited downloads',
-  'PDF + Word formats',
-  'Weekly new content',
-  'Resources library',
-  'Referral commission earnings',
-];
-
-const ADMIN_FEATURES = [
-  'Up to 5 staff accounts',
-  'Principal, Deputy, Senior Teacher, DoS, HoD G&C',
-  'All individual features for each account',
-  'School-wide access',
-  'Usage analytics',
-  'Priority support',
-  'Referral commission earnings (20%)',
-];
-
 interface PaymentModalProps {
   pkg: PackageType;
   billing: BillingPeriod;
   amount: number;
   onClose: () => void;
   profile: Profile | null;
+  onPaymentSuccess?: () => void;
 }
 
-function PaymentModal({ pkg, billing, amount, onClose, profile }: PaymentModalProps) {
+function PaymentModal({ pkg, billing, amount, onClose, profile, onPaymentSuccess }: PaymentModalProps) {
+  const { bank_details, contact_info } = usePublicSettings();
   const [method, setMethod] = useState<'mpesa' | 'bank' | null>(null);
   const [phone, setPhone] = useState(profile?.phone?.replace('+254', '0') ?? '');
   const [loading, setLoading] = useState(false);
@@ -75,12 +91,14 @@ function PaymentModal({ pkg, billing, amount, onClose, profile }: PaymentModalPr
       const res = await fetch('/api/payments/mpesa/stk-push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount, package: pkg, billing }),
+        body: JSON.stringify({ phone, amount, package: pkg, billing, userId: profile?.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment initiation failed');
       setStatus('success');
       setMessage('✅ Check your phone and enter your M-Pesa PIN to complete payment. Your account will be activated automatically.');
+      // Notify parent to refresh the profile once payment is confirmed
+      onPaymentSuccess?.();
     } catch (err) {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Payment failed. Please try again.');
@@ -213,9 +231,9 @@ function PaymentModal({ pkg, billing, amount, onClose, profile }: PaymentModalPr
             <div style={{ padding: '18px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', marginBottom: 16 }}>
               <div style={{ color: C.gray, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12 }}>BANK TRANSFER DETAILS</div>
               {[
-                { label: 'Bank', value: 'National Bank of Kenya (NBK)' },
-                { label: 'Account Name', value: 'Motisha Speaking & Training Services' },
-                { label: 'Account Number', value: '01521' },
+                { label: 'Bank', value: bank_details.bank_name },
+                { label: 'Account Name', value: bank_details.account_name },
+                { label: 'Account Number', value: bank_details.account_number },
                 { label: 'Amount', value: `KES ${amount.toLocaleString()}` },
                 { label: 'Reference', value: profile?.name ?? 'Your Name + Phone' },
               ].map(row => (
@@ -226,7 +244,9 @@ function PaymentModal({ pkg, billing, amount, onClose, profile }: PaymentModalPr
               ))}
             </div>
             <div style={{ padding: '12px 14px', borderRadius: 8, background: `${C.mustard}10`, border: `1px solid ${C.mustard}25`, fontSize: '0.78rem', color: C.offWhite, lineHeight: 1.6 }}>
-              💡 After transferring, send your payment confirmation to <strong style={{ color: C.mustard }}>support@motisha.co.ke</strong> or WhatsApp <strong style={{ color: C.mustard }}>+254 700 000 000</strong> with your name and phone number. Your account will be activated within 24 hours.
+              💡 After transferring, send your payment confirmation to{' '}
+              <strong style={{ color: C.mustard }}>{contact_info.support_email}</strong> or WhatsApp{' '}
+              <strong style={{ color: C.mustard }}>{contact_info.whatsapp}</strong> with your name and phone number. Your account will be activated within 24 hours.
             </div>
             <button onClick={onClose} style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: 10, fontWeight: 700, background: `${C.teal}20`, color: C.teal, border: `1px solid ${C.teal}30`, cursor: 'pointer', fontSize: '0.88rem' }}>
               Got it
@@ -239,9 +259,37 @@ function PaymentModal({ pkg, billing, amount, onClose, profile }: PaymentModalPr
 }
 
 export function PricingTab({ profile, onNav }: PricingTabProps) {
+  const { refreshProfile } = useAuth();
   const currentTier = profile?.subscription_tier ?? 'free';
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
   const [payingFor, setPayingFor] = useState<{ pkg: PackageType; billing: BillingPeriod; amount: number } | null>(null);
+
+  // Live prices fetched from the plans table
+  const [prices, setPrices] = useState<Record<PackageType, Record<BillingPeriod, number>>>(FALLBACK_PRICES);
+  const [features, setFeatures] = useState<Record<PackageType, string[]>>(FALLBACK_FEATURES);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/public/plans')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { plans?: DbPlan[] } | null) => {
+        if (!data?.plans?.length) return;
+        const newPrices = { ...FALLBACK_PRICES };
+        const newFeatures = { ...FALLBACK_FEATURES };
+        for (const plan of data.plans) {
+          if (!newPrices[plan.package]) continue;
+          newPrices[plan.package] = { ...newPrices[plan.package], [plan.billing]: plan.price_kes };
+          // Use DB features for the monthly plan as the canonical feature list
+          if (plan.billing === 'monthly' && plan.features?.length) {
+            newFeatures[plan.package] = plan.features;
+          }
+        }
+        setPrices(newPrices);
+        setFeatures(newFeatures);
+      })
+      .catch(() => { /* keep fallback */ })
+      .finally(() => setPlansLoading(false));
+  }, []);
 
   const isSubscribed = currentTier === 'pro' || currentTier === 'school';
 
@@ -301,18 +349,20 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
             <h3 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem', marginBottom: 4 }}>Individual</h3>
             <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 16 }}>For a single teacher</p>
             <div style={{ marginBottom: 20 }}>
-              <span style={{ color: C.white, fontWeight: 900, fontSize: '2rem' }}>KES {PRICES.individual[billing].toLocaleString()}</span>
+              <span style={{ color: C.white, fontWeight: 900, fontSize: '2rem' }}>
+                {plansLoading ? '…' : `KES ${prices.individual[billing].toLocaleString()}`}
+              </span>
               <span style={{ color: C.gray, fontSize: '0.78rem' }}> / {BILLING_LABELS[billing].toLowerCase()}</span>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {INDIVIDUAL_FEATURES.map(f => (
+              {features.individual.map(f => (
                 <li key={f} style={{ display: 'flex', gap: 8, fontSize: '0.8rem', color: '#CBD5E1' }}>
                   <span style={{ color: C.teal, flexShrink: 0 }}>✓</span>{f}
                 </li>
               ))}
             </ul>
             <button
-              onClick={() => !isSubscribed && setPayingFor({ pkg: 'individual', billing, amount: PRICES.individual[billing] })}
+              onClick={() => !isSubscribed && setPayingFor({ pkg: 'individual', billing, amount: prices.individual[billing] })}
               disabled={currentTier === 'pro'}
               style={{
                 width: '100%', padding: '12px', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem',
@@ -343,7 +393,9 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
             <h3 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem', marginBottom: 4 }}>Admin</h3>
             <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 16 }}>For school leadership teams</p>
             <div style={{ marginBottom: 20 }}>
-              <span style={{ color: C.white, fontWeight: 900, fontSize: '2rem' }}>KES {PRICES.admin[billing].toLocaleString()}</span>
+              <span style={{ color: C.white, fontWeight: 900, fontSize: '2rem' }}>
+                {plansLoading ? '…' : `KES ${prices.admin[billing].toLocaleString()}`}
+              </span>
               <span style={{ color: C.gray, fontSize: '0.78rem' }}> / {BILLING_LABELS[billing].toLowerCase()}</span>
             </div>
             {/* Sub-account roles */}
@@ -356,14 +408,14 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
               ))}
             </div>
             <ul style={{ listStyle: 'none', padding: 0, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {ADMIN_FEATURES.map(f => (
+              {features.admin.map(f => (
                 <li key={f} style={{ display: 'flex', gap: 8, fontSize: '0.8rem', color: '#CBD5E1' }}>
                   <span style={{ color: C.mustard, flexShrink: 0 }}>✓</span>{f}
                 </li>
               ))}
             </ul>
             <button
-              onClick={() => currentTier !== 'school' && setPayingFor({ pkg: 'admin', billing, amount: PRICES.admin[billing] })}
+              onClick={() => currentTier !== 'school' && setPayingFor({ pkg: 'admin', billing, amount: prices.admin[billing] })}
               disabled={currentTier === 'school'}
               style={{
                 width: '100%', padding: '12px', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem',
@@ -396,6 +448,16 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
           amount={payingFor.amount}
           profile={profile}
           onClose={() => setPayingFor(null)}
+          onPaymentSuccess={() => {
+            // Poll for profile update — the M-Pesa callback updates the DB
+            // asynchronously, so we retry a few times with a delay.
+            let attempts = 0;
+            const poll = setInterval(async () => {
+              await refreshProfile();
+              attempts++;
+              if (attempts >= 6) clearInterval(poll); // stop after ~30s
+            }, 5000);
+          }}
         />
       )}
     </div>

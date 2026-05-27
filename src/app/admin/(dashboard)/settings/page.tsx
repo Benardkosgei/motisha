@@ -6,7 +6,7 @@ import {
   Settings, Palette, Mail, Bell, Shield, Save, Upload,
   ExternalLink, CheckCircle, AlertTriangle, Eye, EyeOff,
   Lock, User, Globe, FileCheck, Key, RefreshCw, Smartphone, Gift,
-  CalendarDays, Plus, Pencil, Trash2, CheckCircle2,
+  CalendarDays, Plus, Pencil, Trash2, CheckCircle2, Phone, Building2, Megaphone,
 } from 'lucide-react';
 import { C } from '@/components/Logo';
 import { invalidateLogoCache } from '@/lib/use-logo';
@@ -18,13 +18,25 @@ interface SystemSettings {
   system_name?: { name: string };
   email_sender_name?: { name: string };
   email_sender_address?: { address: string };
+  smtp_config?: {
+    host?: string;
+    port?: number;
+    secure?: boolean;
+    username?: string;
+    password?: string;   // masked in UI — never displayed
+    sender_name?: string;
+    sender_address?: string;
+  };
   notifications_enabled?: { enabled: boolean };
   mpesa_config?: { shortcode?: string; callback_url?: string; env?: string };
   referral_rates?: { individual?: number; admin?: number };
+  contact_info?: { owner_name?: string; whatsapp?: string; email?: string; support_email?: string; response_hours?: number };
+  bank_details?: { bank_name?: string; account_name?: string; account_number?: string; branch?: string };
+  hero_slides?: Array<{ title: string; tag: string; sub: string; icon: string; accent: string; nav: string }>;
   _timestamps?: Record<string, string>;
 }
 
-type TabId = 'system' | 'branding' | 'email' | 'notifications' | 'payments' | 'referral' | 'calendar' | 'security';
+type TabId = 'system' | 'branding' | 'email' | 'notifications' | 'payments' | 'referral' | 'contact' | 'hero' | 'calendar' | 'security';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'system',        label: 'System',        icon: Globe },
@@ -33,6 +45,8 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'payments',      label: 'Payments',      icon: Smartphone },
   { id: 'referral',      label: 'Referral',      icon: Gift },
+  { id: 'contact',       label: 'Contact & Bank', icon: Phone },
+  { id: 'hero',          label: 'Hero Slides',   icon: Megaphone },
   { id: 'calendar',      label: 'Academic Calendar', icon: CalendarDays },
   { id: 'security',      label: 'Security',      icon: Shield },
 ];
@@ -188,32 +202,96 @@ function BrandingTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 function EmailTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
-  const [senderName, setSenderName] = useState(s.email_sender_name?.name ?? '');
-  const [senderAddr, setSenderAddr] = useState(s.email_sender_address?.address ?? '');
+  const smtp = s.smtp_config ?? {};
+
+  // Sender identity (synced to smtp_config.sender_*)
+  const [senderName, setSenderName] = useState(smtp.sender_name ?? s.email_sender_name?.name ?? '');
+  const [senderAddr, setSenderAddr] = useState(smtp.sender_address ?? s.email_sender_address?.address ?? '');
+
+  // SMTP connection
+  const [host, setHost]         = useState(smtp.host ?? '');
+  const [port, setPort]         = useState(String(smtp.port ?? 587));
+  const [secure, setSecure]     = useState(smtp.secure ?? false);
+  const [username, setUsername] = useState(smtp.username ?? '');
+  const [password, setPassword] = useState('');           // never pre-filled
+  const [showPass, setShowPass] = useState(false);
+  const hasStoredPass           = !!(smtp.password);
+
+  // Test email
+  const [testRecipient, setTestRecipient] = useState('');
+  const [testing, setTesting]             = useState(false);
+  const [testOk, setTestOk]               = useState('');
+  const [testErr, setTestErr]             = useState('');
+
   const [busy, setBusy] = useState(false);
-  const [ok, setOk] = useState('');
-  const [err, setErr] = useState('');
+  const [ok, setOk]     = useState('');
+  const [err, setErr]   = useState('');
+
+  // Auto-set port when secure toggle changes
+  function handleSecureToggle(val: boolean) {
+    setSecure(val);
+    if (val && port === '587') setPort('465');
+    if (!val && port === '465') setPort('587');
+  }
 
   async function save() {
-    if (!senderAddr.includes('@')) { setErr('Enter a valid email address.'); return; }
+    if (!senderAddr.includes('@')) { setErr('Enter a valid sender email address.'); return; }
+    if (!host.trim()) { setErr('SMTP host is required.'); return; }
+    const portNum = Number(port);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) { setErr('Port must be 1–65535.'); return; }
+    if (!username.trim()) { setErr('SMTP username is required.'); return; }
+
     setBusy(true); setErr(''); setOk('');
     try {
       const fd = new FormData();
-      fd.append('email_sender_name', senderName);
+      fd.append('email_sender_name',    senderName);
       fd.append('email_sender_address', senderAddr);
+      fd.append('smtp_host',     host.trim());
+      fd.append('smtp_port',     port);
+      fd.append('smtp_secure',   String(secure));
+      fd.append('smtp_username', username.trim());
+      if (password.trim()) fd.append('smtp_password', password.trim());
+
       const r = await fetch('/api/admin/settings', { method: 'PATCH', body: fd });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Failed'); }
       onSaved(await r.json());
-      setOk('Email configuration saved.'); setTimeout(() => setOk(''), 4000);
+      setPassword(''); // clear after save
+      setOk('Email & SMTP configuration saved.'); setTimeout(() => setOk(''), 5000);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(false); }
   }
+
+  async function sendTestEmail() {
+    if (!testRecipient.includes('@')) { setTestErr('Enter a valid recipient email.'); return; }
+    setTesting(true); setTestErr(''); setTestOk('');
+    try {
+      const r = await fetch('/api/admin/settings/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: testRecipient }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Failed to send test email');
+      setTestOk(`Test email sent to ${testRecipient}. Check your inbox.`);
+      setTimeout(() => setTestOk(''), 8000);
+    } catch (e) { setTestErr(e instanceof Error ? e.message : 'Failed'); } finally { setTesting(false); }
+  }
+
+  const PRESETS = [
+    { label: 'Gmail',     host: 'smtp.gmail.com',     port: '587', secure: false, note: 'Use an App Password, not your Google account password.' },
+    { label: 'Outlook',   host: 'smtp.office365.com', port: '587', secure: false, note: 'Use your Microsoft 365 credentials.' },
+    { label: 'Zoho Mail', host: 'smtp.zoho.com',      port: '465', secure: true,  note: 'Use your Zoho Mail credentials.' },
+    { label: 'SendGrid',  host: 'smtp.sendgrid.net',  port: '587', secure: false, note: 'Username is "apikey", password is your SendGrid API key.' },
+    { label: 'Mailgun',   host: 'smtp.mailgun.org',   port: '587', secure: false, note: 'Use your Mailgun SMTP credentials.' },
+  ];
 
   return (
     <div>
       {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
-      <div style={crd}>
-        <SecTitle icon={Mail} label="Outbound Email Configuration" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16, marginBottom: 20 }}>
+
+      {/* ── Sender Identity ── */}
+      <div style={{ ...crd, marginBottom: 16 }}>
+        <SecTitle icon={Mail} label="Sender Identity" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16, marginBottom: 4 }}>
           <div style={fld}>
             <label style={lbl}><User size={13} />Sender Name</label>
             <input type="text" value={senderName} onChange={e => setSenderName(e.target.value)} placeholder="Motisha Platform" style={inp} />
@@ -222,22 +300,148 @@ function EmailTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettin
           </div>
           <div style={fld}>
             <label style={lbl}><Mail size={13} />Sender Email Address</label>
-            <input type="email" value={senderAddr} onChange={e => setSenderAddr(e.target.value)} placeholder="noreply@motisha.com" style={inp} />
-            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Replies from teachers will arrive at this address.</p>
+            <input type="email" value={senderAddr} onChange={e => setSenderAddr(e.target.value)} placeholder="noreply@motisha.co.ke" style={inp} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Must match or be authorised by your SMTP account.</p>
             <LastUpdated ts={s._timestamps?.email_sender_address} />
           </div>
         </div>
-        <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.12)' }}>
-          <div style={{ color: C.gray, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Preview</div>
-          <div style={{ color: C.offWhite, fontSize: '0.82rem', marginBottom: 4 }}>
+        {/* From preview */}
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.12)' }}>
+          <span style={{ color: C.gray, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Preview — </span>
+          <span style={{ color: C.offWhite, fontSize: '0.82rem' }}>
             <span style={{ color: C.gray }}>From: </span>
             <strong>{senderName || 'Motisha Platform'}</strong>
-            {' <'}{senderAddr || 'noreply@motisha.com'}{'>'}
-          </div>
-          <div style={{ color: C.gray, fontSize: '0.76rem' }}>Subject: New content available on Motisha this week</div>
+            {' <'}{senderAddr || 'noreply@motisha.co.ke'}{'>'}
+          </span>
         </div>
       </div>
-      <div style={{ marginTop: 20 }}><Btn busy={busy} onClick={save} /></div>
+
+      {/* ── SMTP Provider Presets ── */}
+      <div style={{ ...crd, marginBottom: 16 }}>
+        <SecTitle icon={Globe} label="Quick Setup — Provider Presets" color={C.mustard} />
+        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 14, lineHeight: 1.5 }}>
+          Click a preset to auto-fill the host and port. You still need to enter your username and password.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {PRESETS.map(p => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => { setHost(p.host); setPort(p.port); setSecure(p.secure); }}
+              style={{ padding: '7px 14px', borderRadius: 7, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', border: `1px solid rgba(14,165,233,0.25)`, background: host === p.host ? `rgba(14,165,233,0.15)` : 'rgba(14,165,233,0.06)', color: host === p.host ? C.teal : C.offWhite, fontFamily: "'DM Sans',sans-serif", transition: 'all 0.15s' }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {PRESETS.find(p => p.host === host) && (
+          <p style={{ color: C.mustard, fontSize: '0.74rem', marginTop: 10, lineHeight: 1.5 }}>
+            💡 {PRESETS.find(p => p.host === host)?.note}
+          </p>
+        )}
+      </div>
+
+      {/* ── SMTP Connection ── */}
+      <div style={{ ...crd, marginBottom: 16 }}>
+        <SecTitle icon={Key} label="SMTP Connection" />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+          <div style={fld}>
+            <label style={lbl}><Globe size={13} />SMTP Host</label>
+            <input type="text" value={host} onChange={e => setHost(e.target.value)} placeholder="smtp.gmail.com" style={inp} />
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Globe size={13} />Port</label>
+            <input type="number" min="1" max="65535" value={port} onChange={e => setPort(e.target.value)} style={{ ...inp, width: 120 }} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>587 = STARTTLS · 465 = TLS/SSL · 25 = plain (not recommended)</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Lock size={13} />Encryption</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { label: 'STARTTLS (port 587)', value: false },
+                { label: 'TLS/SSL (port 465)', value: true },
+              ].map(opt => (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => handleSecureToggle(opt.value)}
+                  style={{ padding: '8px 14px', borderRadius: 7, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all 0.15s', background: secure === opt.value ? `rgba(14,165,233,0.2)` : 'rgba(255,255,255,0.05)', color: secure === opt.value ? C.teal : C.gray, outline: secure === opt.value ? `1px solid ${C.teal}40` : '1px solid rgba(255,255,255,0.1)', fontFamily: "'DM Sans',sans-serif" }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><User size={13} />SMTP Username</label>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="you@gmail.com" autoComplete="off" style={inp} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Usually your email address or API key name.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Lock size={13} />
+              SMTP Password
+              {hasStoredPass && <span style={{ color: C.success, fontSize: '0.68rem', fontWeight: 600, marginLeft: 6 }}>● Saved</span>}
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder={hasStoredPass ? '••••••••  (leave blank to keep current)' : 'Enter SMTP password or app password'}
+                autoComplete="new-password"
+                style={{ ...inp, paddingRight: 44 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                aria-label={showPass ? 'Hide password' : 'Show password'}
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.gray, padding: 0 }}
+              >
+                {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>
+              For Gmail, use an <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" style={{ color: C.teal }}>App Password</a>, not your Google account password.
+            </p>
+          </div>
+        </div>
+
+        <LastUpdated ts={s._timestamps?.smtp_config} />
+      </div>
+
+      <div style={{ marginBottom: 20 }}><Btn busy={busy} onClick={save} /></div>
+
+      {/* ── Test Email ── */}
+      <div style={{ ...crd }}>
+        <SecTitle icon={CheckCircle} label="Send Test Email" color={C.success} />
+        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 16, lineHeight: 1.5 }}>
+          Save your SMTP settings first, then send a test email to verify the configuration works.
+        </p>
+        {testOk && <OK msg={testOk} />}
+        {testErr && <ERR msg={testErr} />}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label style={lbl}><Mail size={13} />Recipient Email</label>
+            <input
+              type="email"
+              value={testRecipient}
+              onChange={e => setTestRecipient(e.target.value)}
+              placeholder="your@email.com"
+              style={inp}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={sendTestEmail}
+            disabled={testing}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 8, background: testing ? 'rgba(16,185,129,0.1)' : `rgba(16,185,129,0.15)`, color: C.success, border: `1px solid ${C.success}40`, fontWeight: 700, fontSize: '0.85rem', cursor: testing ? 'not-allowed' : 'pointer', opacity: testing ? 0.7 : 1, fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}
+          >
+            {testing ? <RefreshCw size={14} style={{ animation: 'spin .7s linear infinite' }} /> : <CheckCircle size={14} />}
+            {testing ? 'Sending…' : 'Send Test Email'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -331,9 +535,14 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
       {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
       <div style={crd}>
         <SecTitle icon={Smartphone} label="M-Pesa Daraja Configuration" />
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.2)', marginBottom: 20 }}>
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.2)', marginBottom: 12 }}>
           <p style={{ color: C.mustard, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
             Consumer Key and Consumer Secret are stored in <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code> for security. Only non-secret config is stored here.
+          </p>
+        </div>
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 20 }}>
+          <p style={{ color: C.danger, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
+            <strong>⚠ Important:</strong> The shortcode and callback URL saved here are for reference only. The live M-Pesa payment routes read credentials exclusively from <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code> (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_SHORTCODE</code>, <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_CALLBACK_URL</code>, etc.). Update those env vars and redeploy to change live payment behaviour.
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
@@ -415,6 +624,11 @@ function ReferralTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
       {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
       <div style={crd}>
         <SecTitle icon={Gift} label="Referral Commission Rates" />
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 16 }}>
+          <p style={{ color: C.danger, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
+            <strong>⚠ Important:</strong> These rates are stored for display purposes. The actual commission calculation is performed by a Postgres trigger (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>handle_subscription_commission</code>) which has the rates hardcoded. To change live commission rates, update the trigger in Supabase and redeploy migration <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>20250510000015</code>.
+          </p>
+        </div>
         <p style={{ color: C.gray, fontSize: '0.82rem', marginBottom: 20 }}>
           Commission is paid immediately when a referred user completes a subscription payment.
         </p>
@@ -442,6 +656,271 @@ function ReferralTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
         <LastUpdated ts={s._timestamps?.referral_rates} />
       </div>
       <div style={{ marginTop: 20 }}><Btn busy={busy} onClick={save} /></div>
+    </div>
+  );
+}
+
+// ── Contact Info & Bank Details ───────────────────────────────────────────────
+
+function ContactBankTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
+  const ci = s.contact_info ?? {};
+  const bd = s.bank_details ?? {};
+
+  const [ownerName, setOwnerName]       = useState(ci.owner_name ?? 'Tom Charles');
+  const [whatsapp, setWhatsapp]         = useState(ci.whatsapp ?? '+254768205511');
+  const [email, setEmail]               = useState(ci.email ?? 'info@motisha.co.ke');
+  const [supportEmail, setSupportEmail] = useState(ci.support_email ?? 'support@motisha.co.ke');
+  const [responseHours, setResponseHours] = useState(String(ci.response_hours ?? 3));
+
+  const [bankName, setBankName]           = useState(bd.bank_name ?? 'National Bank of Kenya (NBK)');
+  const [accountName, setAccountName]     = useState(bd.account_name ?? 'Motisha Speaking & Training Services');
+  const [accountNumber, setAccountNumber] = useState(bd.account_number ?? '01521');
+  const [branch, setBranch]               = useState(bd.branch ?? '');
+
+  const [busy, setBusy] = useState(false);
+  const [ok, setOk]     = useState('');
+  const [err, setErr]   = useState('');
+
+  async function save() {
+    if (!ownerName.trim()) { setErr('Owner name is required'); return; }
+    if (!email.includes('@')) { setErr('Enter a valid email'); return; }
+    setBusy(true); setErr(''); setOk('');
+    try {
+      const fd = new FormData();
+      fd.append('contact_owner_name', ownerName.trim());
+      fd.append('contact_whatsapp', whatsapp.trim());
+      fd.append('contact_email', email.trim());
+      fd.append('contact_support_email', supportEmail.trim());
+      fd.append('contact_response_hours', responseHours);
+      fd.append('bank_name', bankName.trim());
+      fd.append('bank_account_name', accountName.trim());
+      fd.append('bank_account_number', accountNumber.trim());
+      fd.append('bank_branch', branch.trim());
+      const r = await fetch('/api/admin/settings', { method: 'PATCH', body: fd });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Failed'); }
+      onSaved(await r.json());
+      setOk('Contact & bank details saved.'); setTimeout(() => setOk(''), 4000);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(false); }
+  }
+
+  return (
+    <div>
+      {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
+
+      {/* Contact Info */}
+      <div style={{ ...crd, marginBottom: 20 }}>
+        <SecTitle icon={Phone} label="Contact Information" />
+        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 20, lineHeight: 1.5 }}>
+          These details appear on the Book a Service page, payment confirmations, and bank transfer instructions.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+          <div style={fld}>
+            <label style={lbl}><User size={13} />Owner / Speaker Name</label>
+            <input type="text" value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Tom Charles" style={inp} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Shown in booking confirmations and service descriptions.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Phone size={13} />WhatsApp Number</label>
+            <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+254768205511" style={inp} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Used for booking notifications and the contact CTA.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Mail size={13} />Primary Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="info@motisha.co.ke" style={inp} />
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Mail size={13} />Support Email</label>
+            <input type="email" value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="support@motisha.co.ke" style={inp} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Shown in bank transfer instructions.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Smartphone size={13} />Response Time (hours)</label>
+            <input type="number" min="1" max="72" value={responseHours} onChange={e => setResponseHours(e.target.value)} style={{ ...inp, width: 120 }} />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Shown in booking form: &ldquo;We respond within X hours&rdquo;.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bank Details */}
+      <div style={{ ...crd, marginBottom: 20 }}>
+        <SecTitle icon={Building2} label="Bank Transfer Details" />
+        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 20, lineHeight: 1.5 }}>
+          Shown to users who choose bank transfer on the pricing and booking deposit pages.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+          <div style={fld}>
+            <label style={lbl}><Building2 size={13} />Bank Name</label>
+            <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="National Bank of Kenya (NBK)" style={inp} />
+          </div>
+          <div style={fld}>
+            <label style={lbl}><User size={13} />Account Name</label>
+            <input type="text" value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="Motisha Speaking & Training Services" style={inp} />
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Key size={13} />Account Number</label>
+            <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="01521" style={inp} />
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Globe size={13} />Branch (optional)</label>
+            <input type="text" value={branch} onChange={e => setBranch(e.target.value)} placeholder="e.g. Nairobi CBD" style={inp} />
+          </div>
+        </div>
+
+        {/* Live preview */}
+        <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.12)', marginTop: 4 }}>
+          <div style={{ color: C.gray, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Preview — as shown to users</div>
+          {[
+            ['Bank', bankName || '—'],
+            ['Account Name', accountName || '—'],
+            ['Account Number', accountNumber || '—'],
+            ...(branch ? [['Branch', branch]] : []),
+          ].map(([l, v]) => (
+            <div key={l} style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <span style={{ color: C.gray, fontSize: '0.78rem', minWidth: 130 }}>{l}</span>
+              <span style={{ color: C.white, fontWeight: 600, fontSize: '0.78rem' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Btn busy={busy} onClick={save} />
+    </div>
+  );
+}
+
+// ── Hero Slides ───────────────────────────────────────────────────────────────
+
+const NAV_OPTIONS = ['home', 'calendar', 'courses', 'referral', 'book-service', 'resources', 'pricing', 'notifications'];
+const ACCENT_PRESETS = [
+  { label: 'Teal', value: '#0EA5E9' },
+  { label: 'Green', value: '#10B981' },
+  { label: 'Amber', value: '#F5A623' },
+  { label: 'Purple', value: '#A855F7' },
+  { label: 'Cyan', value: '#06B6D4' },
+  { label: 'Rose', value: '#F43F5E' },
+];
+
+type HeroSlide = NonNullable<SystemSettings['hero_slides']>[number];
+
+function HeroSlidesTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
+  const defaultSlides: HeroSlide[] = s.hero_slides ?? [
+    { title: 'Opening Term Assembly Speech', tag: 'WEEK 1 · NEW', sub: 'Powerful opening address welcoming students back — ready to deliver', icon: '🎤', accent: '#0EA5E9', nav: 'calendar' },
+    { title: 'Financial Freedom for Teachers', tag: 'PREMIUM COURSE', sub: '10 modules · 4.5 hrs · TSC CPD hours included', icon: '💰', accent: '#10B981', nav: 'courses' },
+    { title: 'Student Council Leadership Pack', tag: 'THIS WEEK', sub: 'Full training guide + meeting scripts + templates', icon: '🌟', accent: '#F5A623', nav: 'calendar' },
+  ];
+
+  const [slides, setSlides] = useState<HeroSlide[]>(defaultSlides);
+  const [busy, setBusy]     = useState(false);
+  const [ok, setOk]         = useState('');
+  const [err, setErr]       = useState('');
+
+  function updateSlide(i: number, patch: Partial<HeroSlide>) {
+    setSlides(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
+  }
+
+  function addSlide() {
+    setSlides(prev => [...prev, { title: '', tag: 'NEW', sub: '', icon: '📚', accent: '#0EA5E9', nav: 'calendar' }]);
+  }
+
+  function removeSlide(i: number) {
+    setSlides(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function save() {
+    const invalid = slides.find(s => !s.title.trim());
+    if (invalid) { setErr('All slides must have a title'); return; }
+    setBusy(true); setErr(''); setOk('');
+    try {
+      const fd = new FormData();
+      fd.append('hero_slides', JSON.stringify(slides));
+      const r = await fetch('/api/admin/settings', { method: 'PATCH', body: fd });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Failed'); }
+      onSaved(await r.json());
+      setOk('Hero slides saved.'); setTimeout(() => setOk(''), 4000);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(false); }
+  }
+
+  return (
+    <div>
+      {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
+      <div style={{ ...crd, marginBottom: 20 }}>
+        <SecTitle icon={Megaphone} label="Home Page Hero Carousel" />
+        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 20, lineHeight: 1.5 }}>
+          These slides rotate on the teacher home page. Each slide links to a tab when &ldquo;Open Now&rdquo; is clicked.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {slides.map((slide, i) => (
+            <div key={i} style={{ borderRadius: 10, border: `1px solid rgba(14,165,233,0.15)`, background: C.navyLight, overflow: 'hidden' }}>
+              {/* Accent bar */}
+              <div style={{ height: 3, background: slide.accent }} />
+              <div style={{ padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <span style={{ color: C.white, fontWeight: 700, fontSize: '0.85rem' }}>Slide {i + 1}</span>
+                  {slides.length > 1 && (
+                    <button type="button" onClick={() => removeSlide(i)}
+                      style={{ background: 'none', border: 'none', color: C.danger, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={lbl}>Title *</label>
+                    <input type="text" value={slide.title} onChange={e => updateSlide(i, { title: e.target.value })}
+                      placeholder="e.g. Opening Term Assembly Speech" style={inp} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Tag / Badge</label>
+                    <input type="text" value={slide.tag} onChange={e => updateSlide(i, { tag: e.target.value })}
+                      placeholder="e.g. WEEK 1 · NEW" style={inp} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Icon (emoji)</label>
+                    <input type="text" value={slide.icon} onChange={e => updateSlide(i, { icon: e.target.value })}
+                      placeholder="🎤" style={{ ...inp, width: 80 }} maxLength={4} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={lbl}>Subtitle</label>
+                    <input type="text" value={slide.sub} onChange={e => updateSlide(i, { sub: e.target.value })}
+                      placeholder="Short description shown under the title" style={inp} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Accent Colour</label>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {ACCENT_PRESETS.map(p => (
+                        <button key={p.value} type="button" onClick={() => updateSlide(i, { accent: p.value })}
+                          title={p.label}
+                          style={{ width: 24, height: 24, borderRadius: '50%', background: p.value, border: slide.accent === p.value ? `3px solid ${C.white}` : '2px solid transparent', cursor: 'pointer' }} />
+                      ))}
+                    </div>
+                    <input type="text" value={slide.accent} onChange={e => updateSlide(i, { accent: e.target.value })}
+                      placeholder="#0EA5E9" style={{ ...inp, width: 120 }} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Navigate to (tab)</label>
+                    <div style={{ position: 'relative' }}>
+                      <select value={slide.nav} onChange={e => updateSlide(i, { nav: e.target.value })}
+                        style={{ ...inp, paddingRight: 32, appearance: 'none', cursor: 'pointer' }}>
+                        {NAV_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                      <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: C.gray, pointerEvents: 'none', fontSize: '0.7rem' }}>▾</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {slides.length < 5 && (
+          <button type="button" onClick={addSlide}
+            style={{ width: '100%', marginTop: 12, padding: '11px', borderRadius: 10, border: `1px dashed ${C.teal}40`, background: `${C.teal}08`, color: C.teal, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'DM Sans',sans-serif" }}>
+            <Plus size={14} /> Add Slide
+          </button>
+        )}
+      </div>
+      <Btn busy={busy} onClick={save} />
     </div>
   );
 }
@@ -987,6 +1466,108 @@ interface SecurityTabProps {
   adminRole: string;
 }
 
+// ── Scheduler ─────────────────────────────────────────────────────────────────
+/**
+ * Shows the scheduled-publishing status and lets admins trigger a manual run.
+ * Also documents the cron setup so operators know what to configure.
+ */
+function SchedulerSection() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ published: number; items: Array<{ title: string; type: string }> } | null>(null);
+  const [err, setErr] = useState('');
+
+  async function runNow() {
+    setRunning(true); setErr(''); setResult(null);
+    try {
+      const res = await fetch('/api/admin/scheduler/publish', { method: 'POST' });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Scheduler failed'); }
+      setResult(await res.json());
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Scheduler failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const cronExamples = [
+    { label: 'cPanel Cron Job', value: '*/5 * * * * curl -s https://yourdomain.com/api/admin/scheduler/publish > /dev/null' },
+    { label: 'GitHub Actions (every 5 min)', value: 'on:\n  schedule:\n    - cron: "*/5 * * * *"' },
+    { label: 'Vercel Cron (vercel.json)', value: '{"crons":[{"path":"/api/admin/scheduler/publish","schedule":"*/5 * * * *"}]}' },
+  ];
+
+  return (
+    <div style={{ marginTop: 32, background: C.navyMid, border: '1px solid rgba(14,165,233,0.12)', borderRadius: 12, padding: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h3 style={{ margin: 0, color: C.offWhite, fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <RefreshCw size={14} color={C.teal} /> Scheduled Publishing
+          </h3>
+          <p style={{ margin: '4px 0 0', color: C.gray, fontSize: '0.78rem' }}>
+            Publishes all draft content whose <code style={{ background: 'rgba(14,165,233,0.1)', padding: '1px 5px', borderRadius: 3, color: C.teal }}>publish_at</code> is in the past.
+            Run manually here or configure a cron job to run every 5 minutes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={runNow}
+          disabled={running}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 8, background: `linear-gradient(135deg,${C.teal},${C.turquoise})`, color: C.navy, border: 'none', fontWeight: 700, fontSize: '0.82rem', cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.6 : 1, fontFamily: "'DM Sans',sans-serif" }}
+        >
+          <RefreshCw size={13} style={{ animation: running ? 'spin .7s linear infinite' : 'none' }} />
+          {running ? 'Running…' : 'Run Now'}
+        </button>
+      </div>
+
+      {err && <ERR msg={err} />}
+
+      {result && (
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: result.published > 0 ? `${C.success}12` : 'rgba(14,165,233,0.06)', border: `1px solid ${result.published > 0 ? C.success + '40' : 'rgba(14,165,233,0.15)'}`, marginBottom: 16 }}>
+          <div style={{ color: result.published > 0 ? C.success : C.gray, fontWeight: 700, fontSize: '0.85rem', marginBottom: result.items.length > 0 ? 8 : 0 }}>
+            {result.published === 0 ? '✓ No content due for publishing.' : `✓ Published ${result.published} item${result.published !== 1 ? 's' : ''}.`}
+          </div>
+          {result.items.length > 0 && (
+            <ul style={{ margin: 0, padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {result.items.map(item => (
+                <li key={item.title} style={{ color: C.offWhite, fontSize: '0.78rem' }}>
+                  {item.type}: <strong>{item.title}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Cron setup instructions */}
+      <div style={{ borderTop: '1px solid rgba(14,165,233,0.1)', paddingTop: 16 }}>
+        <div style={{ color: C.gray, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+          Cron Setup — Required for Automatic Publishing
+        </div>
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 14 }}>
+          <p style={{ color: C.danger, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
+            <strong>⚠ No cron is configured.</strong> Scheduled content will not auto-publish until you set up an external cron job that calls <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>GET /api/admin/scheduler/publish</code> every 5 minutes. Use one of the examples below.
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {cronExamples.map(ex => (
+            <div key={ex.label} style={{ borderRadius: 8, background: 'rgba(14,165,233,0.04)', border: '1px solid rgba(14,165,233,0.1)', overflow: 'hidden' }}>
+              <div style={{ padding: '6px 12px', background: 'rgba(14,165,233,0.08)', color: C.teal, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em' }}>
+                {ex.label}
+              </div>
+              <pre style={{ margin: 0, padding: '10px 12px', color: C.offWhite, fontSize: '0.76rem', fontFamily: 'monospace', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {ex.value}
+              </pre>
+            </div>
+          ))}
+        </div>
+        <p style={{ color: C.grayDark, fontSize: '0.72rem', marginTop: 12 }}>
+          The endpoint requires a valid admin session cookie. For cron jobs, add an <code style={{ background: 'rgba(14,165,233,0.1)', padding: '1px 5px', borderRadius: 3, color: C.teal }}>Authorization</code> header or use a dedicated cron secret. See <code style={{ background: 'rgba(14,165,233,0.1)', padding: '1px 5px', borderRadius: 3, color: C.teal }}>src/app/api/admin/scheduler/publish/route.ts</code> for implementation details.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Security ──────────────────────────────────────────────────────────────────
 function SecurityTab({ adminEmail, adminRole }: SecurityTabProps) {
   const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -1159,13 +1740,13 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: 2, marginBottom: 24, background: C.navyMid, borderRadius: 10, padding: 4, border: '1px solid rgba(14,165,233,0.12)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 2, marginBottom: 24, background: C.navyMid, borderRadius: 10, padding: 4, border: '1px solid rgba(14,165,233,0.12)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {TABS.map(tab => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
           return (
             <button key={tab.id} type="button" onClick={() => handleTabChange(tab.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, border: active ? `1px solid ${C.teal}35` : '1px solid transparent', background: active ? `${C.teal}18` : 'transparent', color: active ? C.tealGlow : C.gray, fontWeight: active ? 700 : 500, fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", transition: 'all 0.15s' }}>
+              style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, border: active ? `1px solid ${C.teal}35` : '1px solid transparent', background: active ? `${C.teal}18` : 'transparent', color: active ? C.tealGlow : C.gray, fontWeight: active ? 700 : 500, fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", transition: 'all 0.15s', flexShrink: 0 }}>
               <Icon size={14} />{tab.label}
             </button>
           );
@@ -1188,11 +1769,16 @@ export default function SettingsPage() {
             {tab.id === 'notifications' && <NotificationsSettingsTab s={settings} onSaved={setSettings} />}
             {tab.id === 'payments'      && <PaymentsTab             s={settings} onSaved={setSettings} />}
             {tab.id === 'referral'      && <ReferralTab             s={settings} onSaved={setSettings} />}
+            {tab.id === 'contact'       && <ContactBankTab          s={settings} onSaved={setSettings} />}
+            {tab.id === 'hero'          && <HeroSlidesTab           s={settings} onSaved={setSettings} />}
             {tab.id === 'calendar'      && <AcademicCalendarTab />}
             {tab.id === 'security'      && <SecurityTab adminEmail={adminEmail} adminRole={adminRole} />}
           </div>
         );
       })}
+
+      {/* Scheduler section — always visible at the bottom of settings */}
+      <SchedulerSection />
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>

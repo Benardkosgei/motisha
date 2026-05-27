@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { C } from './Logo';
 import { useAuth } from '@/lib/auth-context';
 import type { Profile } from '@/lib/auth-context';
+import { usePublicSettings } from '@/lib/use-public-settings';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmtKES = (n: number) => `KES ${Number(n).toLocaleString()}`;
@@ -276,6 +278,255 @@ function SubMenu({ menu, onSelect, onBack }: { menu: UiMenu; onSelect: (sub: UiS
   );
 }
 
+// ─── BOOKING CALENDAR ────────────────────────────────────────────────────────
+/**
+ * Inline calendar for picking an event date.
+ * Rules:
+ *  - Past dates are disabled (greyed out)
+ *  - Saturdays are disabled (greyed out with a strikethrough label)
+ *  - Already-booked dates are disabled (shown with a red dot)
+ *  - Sundays are allowed (many school events happen on Sundays)
+ */
+function BookingCalendar({
+  value,
+  onChange,
+  bookedDates,
+  accent,
+}: {
+  value: string;           // YYYY-MM-DD or ''
+  onChange: (date: string) => void;
+  bookedDates: Set<string>;
+  accent: string;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-indexed
+
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Build the grid: pad with nulls for the leading weekday offset
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  // Pad to complete the last row
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const toISO = (day: number) =>
+    `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const isPast = (day: number) => {
+    const d = new Date(viewYear, viewMonth, day);
+    return d < today;
+  };
+
+  const isSaturday = (day: number) => {
+    return new Date(viewYear, viewMonth, day).getDay() === 6;
+  };
+
+  const isBooked = (day: number) => bookedDates.has(toISO(day));
+
+  const isDisabled = (day: number) => isPast(day) || isSaturday(day) || isBooked(day);
+
+  const isSelected = (day: number) => toISO(day) === value;
+
+  const isToday = (day: number) => {
+    const d = new Date(viewYear, viewMonth, day);
+    return d.getTime() === today.getTime();
+  };
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  // Don't allow navigating to months before the current month
+  const canGoPrev = viewYear > today.getFullYear() || viewMonth > today.getMonth();
+
+  return (
+    <div style={{
+      borderRadius: 12,
+      border: `1px solid ${accent}35`,
+      background: 'rgba(255,255,255,0.03)',
+      overflow: 'hidden',
+      userSelect: 'none',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        background: `${accent}10`,
+      }}>
+        <button
+          type="button"
+          onClick={prevMonth}
+          disabled={!canGoPrev}
+          style={{
+            background: 'none', border: 'none', cursor: canGoPrev ? 'pointer' : 'not-allowed',
+            color: canGoPrev ? C.white : C.grayDark, padding: 4, borderRadius: 6,
+            display: 'flex', alignItems: 'center',
+          }}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span style={{ color: C.white, fontWeight: 800, fontSize: '0.88rem' }}>
+          {MONTHS[viewMonth]} {viewYear}
+        </span>
+        <button
+          type="button"
+          onClick={nextMonth}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: C.white, padding: 4, borderRadius: 6,
+            display: 'flex', alignItems: 'center',
+          }}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '8px 8px 4px' }}>
+        {DAYS.map(d => (
+          <div key={d} style={{
+            textAlign: 'center',
+            fontSize: '0.62rem',
+            fontWeight: 800,
+            letterSpacing: '0.06em',
+            color: d === 'Sat' ? C.danger + 'aa' : C.grayDark,
+            padding: '4px 0',
+          }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Date cells */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '0 8px 10px', gap: 2 }}>
+        {cells.map((day, idx) => {
+          if (!day) return <div key={`empty-${idx}`} />;
+
+          const disabled = isDisabled(day);
+          const selected = isSelected(day);
+          const booked = isBooked(day);
+          const sat = isSaturday(day);
+          const past = isPast(day);
+          const todayCell = isToday(day);
+
+          let bg = 'transparent';
+          let color = C.white;
+          let border = '1px solid transparent';
+          let cursor = 'pointer';
+          let opacity = 1;
+
+          if (selected) {
+            bg = accent;
+            color = '#fff';
+            border = `1px solid ${accent}`;
+          } else if (todayCell && !disabled) {
+            border = `1px solid ${accent}60`;
+            color = accent;
+          }
+
+          if (disabled) {
+            cursor = 'not-allowed';
+            opacity = 0.35;
+            color = C.grayDark;
+            if (booked) { opacity = 0.5; color = C.danger; }
+          }
+
+          return (
+            <div
+              key={day}
+              role={disabled ? undefined : 'button'}
+              tabIndex={disabled ? -1 : 0}
+              onClick={() => !disabled && onChange(toISO(day))}
+              onKeyDown={e => !disabled && e.key === 'Enter' && onChange(toISO(day))}
+              title={
+                booked ? 'Already booked'
+                  : sat ? 'Saturdays unavailable'
+                    : past ? 'Date has passed'
+                      : undefined
+              }
+              style={{
+                position: 'relative',
+                textAlign: 'center',
+                padding: '7px 2px',
+                borderRadius: 8,
+                fontSize: '0.8rem',
+                fontWeight: selected ? 800 : 500,
+                background: bg,
+                color,
+                border,
+                cursor,
+                opacity,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                if (!disabled && !selected) {
+                  (e.currentTarget as HTMLDivElement).style.background = `${accent}25`;
+                }
+              }}
+              onMouseLeave={e => {
+                if (!disabled && !selected) {
+                  (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                }
+              }}
+            >
+              {day}
+              {/* Red dot for booked dates */}
+              {booked && (
+                <span style={{
+                  position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)',
+                  width: 4, height: 4, borderRadius: '50%', background: C.danger,
+                  display: 'block',
+                }} />
+              )}
+              {/* Strikethrough line for Saturdays */}
+              {sat && !selected && (
+                <span style={{
+                  position: 'absolute', top: '50%', left: '10%', right: '10%',
+                  height: 1, background: C.danger + '60', display: 'block',
+                }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{
+        display: 'flex', gap: 14, padding: '8px 16px 12px',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        flexWrap: 'wrap',
+      }}>
+        {[
+          { color: accent, label: 'Selected' },
+          { color: C.danger, label: 'Booked / unavailable' },
+          { color: C.grayDark, label: 'Past / Saturday' },
+        ].map(l => (
+          <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: l.color, display: 'inline-block' }} />
+            <span style={{ color: C.grayDark, fontSize: '0.62rem' }}>{l.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── BOOKING FORM ─────────────────────────────────────────────────────────────
 interface FormState {
   date: string; time: string; school: string; county: string;
@@ -288,6 +539,7 @@ function BookingForm({ service, profile, onBack, onSubmit }: {
   onSubmit: (bookingId: string, service: UiSubService, pkg: UiPackage, form: FormState) => void;
 }) {
   const { session } = useAuth();
+  const { contact_info } = usePublicSettings();
   const [selPkg, setSelPkg] = useState<UiPackage | null>(null);
   const [form, setForm] = useState<FormState>({
     date: '', time: '',
@@ -301,14 +553,17 @@ function BookingForm({ service, profile, onBack, onSubmit }: {
   });
   const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'pkg' | 'submit', string>>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
 
   const accent = service.color;
   const isUSD = service.currency === 'USD';
 
-  // Fix #4: scroll the main content area, not window
-  const mainRef = useRef<HTMLElement | null>(null);
+  // Load already-booked dates on mount
   useEffect(() => {
-    mainRef.current = document.querySelector('main');
+    fetch('/api/public/bookings/booked-dates')
+      .then(r => r.json())
+      .then(data => setBookedDates(new Set(data.dates ?? [])))
+      .catch(() => { /* non-fatal — calendar still works, just no greyed slots */ });
   }, []);
 
   const validate = () => {
@@ -429,8 +684,24 @@ function BookingForm({ service, profile, onBack, onSubmit }: {
                 <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 2 }}>We review and respond within <strong style={{ color: C.white }}>3 hours</strong>.</p>
               </div>
               <div style={{ padding: 22 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-                  {field('Event Date', 'date', '', 'date')}
+                <div style={{ marginBottom: 15 }}>
+                  <label style={{ color: C.gray, fontSize: '0.71rem', fontWeight: 700, letterSpacing: '0.1em', display: 'block', marginBottom: 8 }}>
+                    EVENT DATE <span style={{ color: C.danger }}>*</span>
+                    {form.date && (
+                      <span style={{ color: accent, fontWeight: 600, fontSize: '0.72rem', marginLeft: 8, letterSpacing: 0 }}>
+                        — {new Date(form.date + 'T00:00:00').toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    )}
+                  </label>
+                  <BookingCalendar
+                    value={form.date}
+                    onChange={d => { setForm(f => ({ ...f, date: d })); setErrors(er => ({ ...er, date: undefined })); }}
+                    bookedDates={bookedDates}
+                    accent={accent}
+                  />
+                  {errors.date && <p style={{ color: C.danger, fontSize: '0.68rem', marginTop: 4 }}>{errors.date}</p>}
+                </div>
+                <div style={{ marginBottom: 15 }}>
                   {field('Preferred Time', 'time', 'e.g. 9:00 AM', 'time', false)}
                 </div>
                 {field('School / Organisation Name', 'school', 'e.g. Alliance High School, Kikuyu')}
@@ -458,7 +729,10 @@ function BookingForm({ service, profile, onBack, onSubmit }: {
                 <div style={{ padding: '13px 16px', borderRadius: 11, background: `${C.success}10`, border: `1px solid ${C.success}25`, marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>📲</span>
                   <div style={{ fontSize: '0.76rem', color: C.gray, lineHeight: 1.55 }}>
-                    Your request goes to Tom Charles via <strong style={{ color: '#25D366' }}>WhatsApp</strong> and <strong style={{ color: C.teal }}>email</strong> simultaneously. Response within <strong style={{ color: C.white }}>3 hours</strong>.
+                    Your request goes to <strong style={{ color: C.white }}>{contact_info.owner_name}</strong> via{' '}
+                    <strong style={{ color: '#25D366' }}>WhatsApp</strong> and{' '}
+                    <strong style={{ color: C.teal }}>email</strong> simultaneously. Response within{' '}
+                    <strong style={{ color: C.white }}>{contact_info.response_hours} hours</strong>.
                   </div>
                 </div>
 
@@ -521,15 +795,14 @@ function BookingForm({ service, profile, onBack, onSubmit }: {
   );
 }
 
-// ─── CONFIRMATION FLOW ────────────────────────────────────────────────────────
-// Fix #1: real M-Pesa STK push via /api/public/bookings/[id]/pay-deposit
 function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
   bookingId: string; service: UiSubService; pkg: UiPackage;
   form: FormState; onBack: () => void;
 }) {
+  const { contact_info, bank_details } = usePublicSettings();
   const [stage, setStage] = useState<'pending' | 'confirmed' | 'paying' | 'paid' | 'expired'>('pending');
-  // 12-hour real window; for demo we use 90s
-  const expiryMs = useRef(Date.now() + 90_000);
+  // Real 12-hour deposit window — set once on mount
+  const expiryMs = useRef(Date.now() + 12 * 60 * 60 * 1000);
   const [payPhone, setPayPhone] = useState(form.phone);
   const [payError, setPayError] = useState('');
   const [payLoading, setPayLoading] = useState(false);
@@ -538,7 +811,6 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
   const isUSD = service.currency === 'USD';
   const dep = fmtFee(Math.round(pkg.fee * 0.5), service.currency);
   const total = fmtFee(pkg.fee, service.currency);
-  const depositAmount = Math.round(pkg.fee * 0.5);
 
   // Poll for admin confirmation (every 10s)
   useEffect(() => {
@@ -567,6 +839,7 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment failed');
+      setPayLoading(false); // reset loading before transitioning stage
       setStage('paying');
       // Poll for deposit_paid status
       const poll = setInterval(async () => {
@@ -592,14 +865,19 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
   async function handleBankPay() {
     setPayLoading(true); setPayError('');
     try {
-      await fetch(`/api/public/bookings/${bookingId}/pay-deposit`, {
+      const res = await fetch(`/api/public/bookings/${bookingId}/pay-deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_method: 'bank' }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to record bank payment');
+      }
       setStage('paid');
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Failed');
+    } finally {
       setPayLoading(false);
     }
   }
@@ -650,10 +928,13 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
           <div style={{ width: 80, height: 80, borderRadius: '50%', background: `${C.mustard}15`, border: `2px solid ${C.mustard}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.2rem', margin: '0 auto 22px', animation: 'bst-pulse 2s infinite' }}>⏳</div>
           <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '1.9rem', letterSpacing: '0.08em', marginBottom: 10 }}>Request Sent!</h2>
           <p style={{ color: C.gray, fontSize: '0.84rem', lineHeight: 1.75, maxWidth: 400, margin: '0 auto 24px' }}>
-            Your booking for <strong style={{ color: C.white }}>{service.title} — {pkg.label}</strong> has been sent to Tom Charles via WhatsApp and email. We respond within <strong style={{ color: C.mustard }}>3 hours</strong>.
+            Your booking for <strong style={{ color: C.white }}>{service.title} — {pkg.label}</strong> has been sent to <strong style={{ color: C.white }}>{contact_info.owner_name}</strong> via WhatsApp and email. We respond within <strong style={{ color: C.mustard }}>{contact_info.response_hours} hours</strong>.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
-            {[{ icon: '📲', label: 'WhatsApp', val: '+254 768 205 511', color: '#25D366' }, { icon: '📧', label: 'Email', val: 'info@motisha.co.ke', color: C.teal }].map(c => (
+            {[
+              { icon: '📲', label: 'WhatsApp', val: contact_info.whatsapp, color: '#25D366' },
+              { icon: '📧', label: 'Email', val: contact_info.email, color: C.teal },
+            ].map(c => (
               <div key={c.label} style={{ padding: '14px', borderRadius: 12, background: `${c.color}10`, border: `1px solid ${c.color}25` }}>
                 <div style={{ fontSize: '1.3rem', marginBottom: 5 }}>{c.icon}</div>
                 <div style={{ color: c.color, fontWeight: 700, fontSize: '0.78rem' }}>{c.label}</div>
@@ -661,7 +942,7 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
               </div>
             ))}
           </div>
-          <p style={{ color: C.grayDark, fontSize: '0.74rem' }}>This page will update automatically when Tom confirms your booking.</p>
+          <p style={{ color: C.grayDark, fontSize: '0.74rem' }}>This page will update automatically when {contact_info.owner_name} confirms your booking.</p>
         </div>
       )}
 
@@ -670,7 +951,7 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
         <div>
           <div style={{ textAlign: 'center', marginBottom: 26 }}>
             <div style={{ width: 72, height: 72, borderRadius: '50%', background: `${C.success}15`, border: `2px solid ${C.success}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.9rem', margin: '0 auto 14px' }}>✅</div>
-            <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '1.85rem', letterSpacing: '0.08em', marginBottom: 6 }}>Confirmed by Tom Charles!</h2>
+            <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '1.85rem', letterSpacing: '0.08em', marginBottom: 6 }}>Confirmed by {contact_info.owner_name}!</h2>
             <p style={{ color: C.gray, fontSize: '0.83rem' }}>Pay the 50% deposit below to lock in your booking.</p>
           </div>
 
@@ -708,7 +989,13 @@ function ConfirmationFlow({ bookingId, service, pkg, form, onBack }: {
               <div style={{ marginTop: isUSD ? 18 : 0 }}>
                 <div style={{ color: C.gray, fontSize: '0.71rem', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10 }}>{isUSD ? 'PAY VIA BANK TRANSFER' : 'OR PAY VIA BANK TRANSFER'}</div>
                 <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 12 }}>
-                  {[['Bank', 'National Bank of Kenya (NBK)'], ['Account Name', 'Motisha Speaking & Training Services'], ['Account No.', '01521'], ['Amount', dep], ['Reference', form.school || 'Your Name']].map(([l, v]) => (
+                  {[
+                    ['Bank', bank_details.bank_name],
+                    ['Account Name', bank_details.account_name],
+                    ['Account No.', bank_details.account_number],
+                    ['Amount', dep],
+                    ['Reference', form.school || 'Your Name'],
+                  ].map(([l, v]) => (
                     <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <span style={{ color: C.gray, fontSize: '0.74rem' }}>{l}</span>
                       <span style={{ color: C.white, fontSize: '0.74rem', fontWeight: 600 }}>{v}</span>
@@ -749,6 +1036,7 @@ interface BookServiceTabProps {
 type View = 'home' | 'submenu' | 'form' | 'confirm';
 
 export function BookServiceTab({ profile }: BookServiceTabProps) {
+  const { contact_info } = usePublicSettings();
   const [menus, setMenus] = useState<UiMenu[]>([]);
   const [loadingMenus, setLoadingMenus] = useState(true);
   const [menuError, setMenuError] = useState('');
@@ -836,7 +1124,7 @@ export function BookServiceTab({ profile }: BookServiceTabProps) {
             </div>
             <h2 style={{ color: C.white, fontFamily: "'Bebas Neue', 'Impact', sans-serif", fontSize: '2rem', letterSpacing: '0.08em', marginBottom: 4 }}>Book a Service</h2>
             <p style={{ color: C.gray, fontSize: '0.85rem', lineHeight: 1.7, maxWidth: 560 }}>
-              Tom Charles has inspired students, impacted teachers and parents, and transformed more than <strong style={{ color: C.white }}>1,500+ schools</strong> across all <strong style={{ color: C.white }}>47 Counties in Kenya</strong>. Select a service category below.
+              <strong style={{ color: C.white }}>{contact_info.owner_name}</strong> has inspired students, impacted teachers and parents, and transformed more than <strong style={{ color: C.white }}>1,500+ schools</strong> across all <strong style={{ color: C.white }}>47 Counties in Kenya</strong>. Select a service category below.
             </p>
           </div>
 
@@ -901,11 +1189,11 @@ export function BookServiceTab({ profile }: BookServiceTabProps) {
             <span style={{ fontSize: '1.6rem', flexShrink: 0 }}>💬</span>
             <div style={{ flex: 1 }}>
               <div style={{ color: C.white, fontWeight: 800, fontSize: '0.88rem', marginBottom: 4 }}>Need a custom package?</div>
-              <div style={{ color: C.gray, fontSize: '0.78rem', lineHeight: 1.6 }}>Contact Tom Charles directly for tailored programmes, multi-event packages, or county-wide school tours.</div>
+              <div style={{ color: C.gray, fontSize: '0.78rem', lineHeight: 1.6 }}>Contact <strong style={{ color: C.white }}>{contact_info.owner_name}</strong> directly for tailored programmes, multi-event packages, or county-wide school tours.</div>
             </div>
             <div style={{ display: 'flex', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-              <a href="https://wa.me/254768205511" target="_blank" rel="noreferrer" style={{ padding: '9px 14px', borderRadius: 9, fontWeight: 800, fontSize: '0.76rem', background: '#25D36620', color: '#25D366', border: '1px solid #25D36635', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>📲 +254 768 205 511</a>
-              <a href="mailto:info@motisha.co.ke" style={{ padding: '9px 14px', borderRadius: 9, fontWeight: 800, fontSize: '0.76rem', background: `${C.teal}18`, color: C.teal, border: `1px solid ${C.teal}30`, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>📧 info@motisha.co.ke</a>
+              <a href={`https://wa.me/${contact_info.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" style={{ padding: '9px 14px', borderRadius: 9, fontWeight: 800, fontSize: '0.76rem', background: '#25D36620', color: '#25D366', border: '1px solid #25D36635', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>📲 {contact_info.whatsapp}</a>
+              <a href={`mailto:${contact_info.email}`} style={{ padding: '9px 14px', borderRadius: 9, fontWeight: 800, fontSize: '0.76rem', background: `${C.teal}18`, color: C.teal, border: `1px solid ${C.teal}30`, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>📧 {contact_info.email}</a>
             </div>
           </div>
         </div>

@@ -28,6 +28,14 @@ function formatDate(iso: string | null | undefined): string {
   });
 }
 
+/** Converts "2025-T2-W3" → "2025 · T2 W3", falls back to raw value */
+function formatWeek(w: string | null | undefined): string {
+  if (!w) return '—';
+  const m = w.match(/^(\d{4})-T([123])-W(\d+)$/);
+  if (!m) return w;
+  return `${m[1]} · T${m[2]} W${m[3]}`;
+}
+
 function getFileType(url: string | null): string {
   if (!url) return '—';
   const lower = url.toLowerCase();
@@ -138,7 +146,7 @@ export default function NewslettersPage() {
     {
       accessorKey: 'week',
       header: 'Week',
-      cell: ({ getValue }) => <span style={{ color: C.gray, fontSize: '0.8rem' }}>{(getValue() as string) || '—'}</span>,
+      cell: ({ getValue }) => <span style={{ color: C.gray, fontSize: '0.8rem' }}>{formatWeek(getValue() as string)}</span>,
     },
     {
       id: 'file_type',

@@ -340,10 +340,19 @@ AS $$
 DECLARE
   v_icon TEXT;
   v_color TEXT;
+  v_title TEXT;
+  v_body TEXT;
+  v_premium_text TEXT;
 BEGIN
-  -- Only fire when status changes to 'published'
-  IF NEW.status != 'published' OR (OLD.status = 'published') THEN
-    RETURN NEW;
+  -- Only fire when content becomes published (on INSERT or UPDATE)
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status != 'published' THEN
+      RETURN NEW;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF NEW.status != 'published' OR (OLD.status = 'published') THEN
+      RETURN NEW;
+    END IF;
   END IF;
 
   v_icon := CASE NEW.type
@@ -364,13 +373,21 @@ BEGIN
     ELSE '#0EA5E9'
   END;
 
+  v_premium_text := CASE WHEN NEW.premium THEN 'Premium' ELSE 'Free' END;
+
+  v_title := 'NEW UPLOAD';
+  v_body := '"' || NEW.title || '" is now live' ||
+    CASE WHEN NEW.week IS NOT NULL AND NEW.week != '' THEN ' Week ' || NEW.week ELSE '' END ||
+    ' · ' || NEW.type || 's · ' || v_premium_text;
+
   -- Insert notification for all active users
   INSERT INTO public.notifications (user_id, title, body, icon, color)
   SELECT
     p.id,
-    'New ' || NEW.type || ' Available! ' || v_icon,
-    NEW.title || ' has just been published. Tap to view.'
-  , v_icon, v_color
+    v_title,
+    v_body,
+    v_icon,
+    v_color
   FROM public.profiles p
   WHERE p.status = 'active' OR p.status IS NULL;
 
@@ -381,6 +398,6 @@ $$;
 DROP TRIGGER IF EXISTS on_content_published ON public.contents;
 
 CREATE TRIGGER on_content_published
-  AFTER UPDATE ON public.contents
+  AFTER INSERT OR UPDATE ON public.contents
   FOR EACH ROW
   EXECUTE FUNCTION public.notify_users_on_content_publish();

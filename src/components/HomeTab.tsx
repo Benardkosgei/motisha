@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, GraduationCap, Gift, Briefcase, FolderOpen, Play, Download } from 'lucide-react';
+import { CalendarDays, GraduationCap, Gift, Briefcase, Play, Download } from 'lucide-react';
 import { C } from './Logo';
-import { COURSES, NavItem } from '@/lib/data';
+import type { NavItem } from '@/lib/data';
 import type { Profile } from '@/lib/auth-context';
+import { useCourses } from '@/lib/use-courses';
+import { useAuth } from '@/lib/auth-context';
+import { usePublicSettings } from '@/lib/use-public-settings';
 
 interface HomeTabProps {
   onNav: (id: NavItem) => void;
@@ -12,23 +15,33 @@ interface HomeTabProps {
 }
 
 export function HomeTab({ onNav, profile }: HomeTabProps) {
+  const { session } = useAuth();
+  const { courses } = useCourses(session?.user?.id);
+  const { hero_slides } = usePublicSettings();
   const [heroIdx, setHeroIdx] = useState(0);
 
-  const HEROES = [
-    { title: 'Opening Term Assembly Speech', tag: 'WEEK 5 · NEW', sub: 'Patriotic address for National Day — ready to deliver', gradient: `linear-gradient(135deg, ${C.navyLight}, #0D3463, #0A4080)`, accent: C.teal, icon: '🎤' },
-    { title: 'Financial Freedom for Teachers', tag: 'PREMIUM COURSE', sub: '10 modules · 4.5 hrs · TSC CPD hours included', gradient: `linear-gradient(135deg, ${C.navyLight}, #1A2E10, #0D3020)`, accent: C.success, icon: '💰' },
-    { title: 'Student Council Leadership Pack', tag: 'THIS WEEK', sub: 'Full training guide + meeting scripts + templates', gradient: `linear-gradient(135deg, ${C.navyLight}, #2D1B00, #3D2800)`, accent: C.mustard, icon: '🌟' },
-  ];
+  // Gradient palettes keyed by accent colour
+  const gradientFor = (accent: string) => {
+    if (accent === C.success || accent === '#10B981') return `linear-gradient(135deg, ${C.navyLight}, #1A2E10, #0D3020)`;
+    if (accent === C.mustard || accent === '#F5A623') return `linear-gradient(135deg, ${C.navyLight}, #2D1B00, #3D2800)`;
+    return `linear-gradient(135deg, ${C.navyLight}, #0D3463, #0A4080)`;
+  };
 
   useEffect(() => {
-    const t = setInterval(() => setHeroIdx(i => (i + 1) % HEROES.length), 5000);
+    if (hero_slides.length <= 1) return;
+    const t = setInterval(() => setHeroIdx(i => (i + 1) % hero_slides.length), 5000);
     return () => clearInterval(t);
-  }, [HEROES.length]);
+  }, [hero_slides.length]);
 
-  const h = HEROES[heroIdx];
+  // Reset index if slides change and current index is out of range
+  useEffect(() => {
+    if (heroIdx >= hero_slides.length) setHeroIdx(0);
+  }, [hero_slides.length, heroIdx]);
 
-  // Compute stats from real data
-  const inProgressCourses = COURSES.filter(c => c.progress > 0);
+  const h = hero_slides[heroIdx] ?? hero_slides[0];
+
+  // Compute stats from live data
+  const inProgressCourses = courses.filter((c) => c.progress > 0 && c.progress < 100);
   const points = profile?.points ?? 0;
   const cashValue = Math.floor(points / 100) * 50;
 
@@ -36,7 +49,7 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
     <div style={{ paddingBottom: 40 }}>
       {/* Hero */}
       <div style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 28, position: 'relative', minHeight: 240 }}>
-        <div style={{ position: 'absolute', inset: 0, background: h.gradient, transition: 'background 0.7s' }} />
+        <div style={{ position: 'absolute', inset: 0, background: gradientFor(h.accent), transition: 'background 0.7s' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.7) 50%, transparent)' }} />
         <div style={{ position: 'absolute', right: -40, top: -40, width: 280, height: 280, borderRadius: '50%', background: `${h.accent}08`, border: `1px solid ${h.accent}15` }} />
         <div style={{ position: 'absolute', right: 40, bottom: -20, width: 150, height: 150, borderRadius: '50%', background: `${h.accent}05` }} />
@@ -49,34 +62,30 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
           <p style={{ color: '#CBD5E1', fontSize: '0.82rem', marginBottom: 20, maxWidth: 380 }}>{h.sub}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => onNav('calendar')}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
+              onClick={() => onNav(h.nav as NavItem)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard || h.accent === '#F5A623' ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
             >
               <Play size={13} fill="currentColor" /> Open Now
             </button>
             <button
-              onClick={() => onNav('calendar')}
+              onClick={() => onNav('calendar' as NavItem)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', background: 'rgba(255,255,255,0.1)', color: C.white, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
             >
-              <Download size={13} /> Download
+              <Download size={13} /> Browse All
             </button>
           </div>
         </div>
         {/* Dots */}
         <div style={{ position: 'absolute', bottom: 14, right: 20, display: 'flex', gap: 6 }}>
-          {HEROES.map((_, i) => (
+          {hero_slides.map((_, i) => (
             <button
               key={i}
               onClick={() => setHeroIdx(i)}
               aria-label={`Slide ${i + 1}`}
               style={{
-                width: i === heroIdx ? 22 : 7,
-                height: 7,
-                borderRadius: 4,
+                width: i === heroIdx ? 22 : 7, height: 7, borderRadius: 4,
                 background: i === heroIdx ? h.accent : 'rgba(255,255,255,0.3)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.3s',
+                border: 'none', cursor: 'pointer', transition: 'all 0.3s',
               }}
             />
           ))}
@@ -135,7 +144,7 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
                   alignItems: 'center',
                 }}
               >
-                <span style={{ fontSize: '1.6rem', flexShrink: 0 }} aria-hidden="true">{c.icon}</span>
+                <span style={{ fontSize: '1.6rem', flexShrink: 0 }} aria-hidden="true">{c.icon ?? '📚'}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: C.white, fontWeight: 700, fontSize: '0.84rem', marginBottom: 4 }}>{c.title}</div>
                   <div
@@ -148,7 +157,9 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
                   >
                     <div style={{ width: `${c.progress}%`, height: '100%', borderRadius: 2, background: `linear-gradient(90deg, ${c.color}, ${c.color}aa)` }} />
                   </div>
-                  <div style={{ color: C.gray, fontSize: '0.68rem' }}>{c.progress}% · Next: {c.nextLesson}</div>
+                  <div style={{ color: C.gray, fontSize: '0.68rem' }}>
+                    {c.progress}% · {c.done} of {c.modules} modules
+                  </div>
                 </div>
                 <button
                   onClick={() => onNav('courses')}

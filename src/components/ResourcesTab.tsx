@@ -25,7 +25,7 @@ interface Resource {
   status: string;
 }
 
-const RESOURCE_TYPES = ['All', 'Audio', 'Research', 'Text', 'Guide', 'Template', 'Resource'];
+const RESOURCE_TYPES = ['All', 'Resource', 'Guide', 'Template'];
 
 export function ResourcesTab({ profile }: ResourcesTabProps) {
   const { session } = useAuth();
