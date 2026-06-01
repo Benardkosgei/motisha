@@ -18,6 +18,11 @@ export interface CourseData {
   icon?: string;
   premium?: boolean;
   week?: string;
+  slide_enabled?: boolean;
+  slide_title?: string | null;
+  slide_tag?: string | null;
+  slide_sub?: string | null;
+  slide_accent?: string | null;
   modules?: number;
   publish_at?: string | null;
   status?: 'draft' | 'published';
@@ -868,6 +873,11 @@ export function CourseForm({ initialData = {}, onSuccess, mode }: CourseFormProp
   const [description, setDescription] = useState(initialData.description ?? '');
   const [icon, setIcon] = useState(initialData.icon ?? '');
   const [week, setWeek] = useState(initialData.week ?? '');
+  const [slideEnabled, setSlideEnabled] = useState(initialData.slide_enabled ?? false);
+  const [slideTitle, setSlideTitle] = useState(initialData.slide_title ?? '');
+  const [slideTag, setSlideTag] = useState(initialData.slide_tag ?? '');
+  const [slideSub, setSlideSub] = useState(initialData.slide_sub ?? '');
+  const [slideAccent, setSlideAccent] = useState(initialData.slide_accent ?? '#0EA5E9');
   const [publishAt, setPublishAt] = useState(toEATInputValue(initialData.publish_at));
   const [thumbnailUrl, setThumbnailUrl] = useState(initialData.thumbnail_url ?? '');
   const [trailerUrl, setTrailerUrl] = useState(initialData.trailer_url ?? '');
@@ -924,6 +934,11 @@ export function CourseForm({ initialData = {}, onSuccess, mode }: CourseFormProp
         icon: icon || null,
         premium,
         week: week.trim() || null,
+        slide_enabled: slideEnabled,
+        slide_title: slideTitle.trim() || null,
+        slide_tag: slideTag.trim() || null,
+        slide_sub: slideSub.trim() || null,
+        slide_accent: slideAccent.trim() || null,
         publish_at: action === 'publish' ? now : publishAt ? fromEATInputValue(publishAt) : null,
         status: action === 'publish' ? 'published' : 'draft',
         ...(action === 'publish' ? { published_at: now } : {}),
@@ -1128,6 +1143,75 @@ export function CourseForm({ initialData = {}, onSuccess, mode }: CourseFormProp
             <input type="text" value={icon} onChange={e => setIcon(e.target.value)}
               placeholder="Or type a custom emoji" style={{ ...inputStyle, width: '100%' }}
               disabled={submitting} maxLength={10} />
+          </div>
+
+          {/* Home slide */}
+          <div style={fieldStyle}>
+            <label style={labelStyle}>Feature on home slider</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.white, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={slideEnabled}
+                  onChange={e => setSlideEnabled(e.target.checked)}
+                  disabled={submitting}
+                  style={{ width: 16, height: 16, accentColor: C.teal, cursor: 'pointer' }}
+                />
+                Add this content as a hero slide
+              </label>
+            </div>
+            {slideEnabled && (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <label htmlFor="course-slide-title" style={labelStyle}>Slide title</label>
+                  <input
+                    id="course-slide-title"
+                    type="text"
+                    value={slideTitle}
+                    onChange={e => setSlideTitle(e.target.value)}
+                    placeholder="Override title shown on the hero slide"
+                    style={inputStyle}
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="course-slide-tag" style={labelStyle}>Slide badge</label>
+                  <input
+                    id="course-slide-tag"
+                    type="text"
+                    value={slideTag}
+                    onChange={e => setSlideTag(e.target.value)}
+                    placeholder="e.g. PREMIUM COURSE"
+                    style={inputStyle}
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="course-slide-sub" style={labelStyle}>Slide subtitle</label>
+                  <input
+                    id="course-slide-sub"
+                    type="text"
+                    value={slideSub}
+                    onChange={e => setSlideSub(e.target.value)}
+                    placeholder="Short summary shown on the slide"
+                    style={inputStyle}
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="course-slide-accent" style={labelStyle}>Slide accent</label>
+                  <input
+                    id="course-slide-accent"
+                    type="text"
+                    value={slideAccent}
+                    onChange={e => setSlideAccent(e.target.value)}
+                    placeholder="#0EA5E9"
+                    style={inputStyle}
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Week picker */}

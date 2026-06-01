@@ -6,11 +6,17 @@ import { useAuth } from '@/lib/auth-context';
 import { isPaidSubscriptionTier, canAccessCourses } from '@/lib/profile-access';
 import { useCourses, type LiveCourse } from '@/lib/use-courses';
 
-export function CoursesTab() {
+export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
   const { session, profile, isOnTrial, trialDaysLeft } = useAuth();
   const userId = session?.user?.id;
 
   const { courses, loading, error, refetch, updateProgress } = useCourses(userId);
+
+  useEffect(() => {
+    if (!initialId || courses.length === 0) return;
+    const found = courses.find(c => c.id === initialId);
+    if (found) setSelected(found as LiveCourse);
+  }, [courses, initialId]);
 
   const [selected, setSelected] = useState<LiveCourse | null>(null);
   const [reminderSet, setReminderSet] = useState<Record<string, boolean>>({});

@@ -13,6 +13,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 interface ArticlesTabProps {
   profile: Profile | null;
+  initialId?: string | undefined;
 }
 
 interface Article {
@@ -292,7 +293,7 @@ function ArticleDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function ArticlesTab({ profile }: ArticlesTabProps) {
+export function ArticlesTab({ profile, initialId }: ArticlesTabProps) {
   const { session } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -323,6 +324,12 @@ export function ArticlesTab({ profile }: ArticlesTabProps) {
   }, [session]);
 
   useEffect(() => { fetchArticles(); }, [fetchArticles]);
+
+  useEffect(() => {
+    if (!initialId || articles.length === 0) return;
+    const found = articles.find(a => a.id === initialId);
+    if (found) setSelected(found);
+  }, [articles, initialId]);
 
   const columns = useMemo<ColumnDef<Article, unknown>[]>(() => [
     {

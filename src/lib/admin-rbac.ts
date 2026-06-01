@@ -108,6 +108,7 @@ export function forbidden(message = 'Forbidden: insufficient permissions'): Next
 
 export type AdminNavSection =
   | 'overview'
+  | 'analytics'
   | 'speeches'
   | 'courses'
   | 'articles'
@@ -120,12 +121,17 @@ export type AdminNavSection =
   | 'revenue'
   | 'settings';
 
+export function canViewAnalytics(role: AdminRole | undefined): boolean {
+  return role === 'super_admin' || role === 'editor';
+}
+
 export function canAccessSection(
   section: AdminNavSection,
   role: AdminRole | undefined
 ): boolean {
   switch (section) {
     case 'overview':    return canViewOverview(role);
+    case 'analytics':   return canViewAnalytics(role);
     case 'speeches':
     case 'courses':
     case 'articles':

@@ -13,6 +13,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 interface SpeechesTabProps {
   profile: Profile | null;
+  initialId?: string | undefined;
 }
 
 interface Speech {
@@ -273,7 +274,7 @@ function SpeechDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function SpeechesTab({ profile }: SpeechesTabProps) {
+export function SpeechesTab({ profile, initialId }: SpeechesTabProps) {
   const { session } = useAuth();
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);
@@ -304,6 +305,13 @@ export function SpeechesTab({ profile }: SpeechesTabProps) {
   }, [session]);
 
   useEffect(() => { fetchSpeeches(); }, [fetchSpeeches]);
+
+  // If an initial id was provided via URL, open that item once loaded
+  useEffect(() => {
+    if (!initialId || speeches.length === 0) return;
+    const found = speeches.find(s => s.id === initialId);
+    if (found) setSelected(found);
+  }, [speeches, initialId]);
 
   const columns = useMemo<ColumnDef<Speech, unknown>[]>(() => [
     {

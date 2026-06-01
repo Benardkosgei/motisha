@@ -81,7 +81,8 @@ export async function PATCH(
 
     // Build update payload — only include fields that were sent
     const allowedFields = [
-      'title', 'description', 'icon', 'premium', 'week', 'modules',
+      'title', 'description', 'icon', 'premium', 'week', 'slide_enabled',
+      'slide_title', 'slide_tag', 'slide_sub', 'slide_accent', 'modules',
       'publish_at', 'status', 'published_at',
       // Expanded fields
       'thumbnail_url', 'trailer_url', 'level', 'language', 'duration_hours',

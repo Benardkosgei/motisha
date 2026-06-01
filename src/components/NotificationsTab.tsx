@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { BellOff, CheckCheck } from 'lucide-react';
 import { C } from './Logo';
 import type { Notification } from '@/lib/supabase';
@@ -11,7 +12,26 @@ interface NotificationsTabProps {
 }
 
 export function NotificationsTab({ notifications, onMarkRead }: NotificationsTabProps) {
+  const router = useRouter();
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotificationClick = (notification: Notification) => {
+    // Navigate based on content type
+    if (notification.content_type && notification.content_id) {
+      const contentTypeMap: Record<string, string> = {
+        'Speech': 'speeches',
+        'Article': 'articles',
+        'Newsletter': 'newsletters',
+        'Course': 'courses',
+        'Resource': 'resources',
+      };
+      const tab = contentTypeMap[notification.content_type];
+      if (tab) {
+        router.push(`/?tab=${tab}&id=${notification.content_id}`);
+      }
+    }
+  };
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -40,17 +60,35 @@ export function NotificationsTab({ notifications, onMarkRead }: NotificationsTab
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {notifications.map(n => (
-            <div
-              key={n.id}
-              style={{
-                display: 'flex', gap: 14, padding: '16px', borderRadius: 14,
-                background: n.read ? C.navyMid : `${n.color}10`,
-                border: `1px solid ${n.read ? 'rgba(255,255,255,0.06)' : `${n.color}30`}`,
-                opacity: n.read ? 0.7 : 1,
-                transition: 'all 0.2s',
-              }}
-            >
+          {notifications.map(n => {
+            const isHovered = hoveredId === n.id;
+            const isClickable = !!n.content_type;
+            const hoverBg = n.read ? 'rgba(30, 40, 80, 0.8)' : `${n.color}20`;
+            const hoverBorder = n.read ? 'rgba(255,255,255,0.12)' : `${n.color}50`;
+            
+            return (
+              <div
+                key={n.id}
+                onClick={() => handleNotificationClick(n)}
+                onMouseEnter={() => isClickable && setHoveredId(n.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                role={isClickable ? 'button' : 'article'}
+                tabIndex={isClickable ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    handleNotificationClick(n);
+                  }
+                }}
+                style={{
+                  display: 'flex', gap: 14, padding: '16px', borderRadius: 14,
+                  background: isHovered ? hoverBg : (n.read ? C.navyMid : `${n.color}10`),
+                  border: `1px solid ${isHovered ? hoverBorder : (n.read ? 'rgba(255,255,255,0.06)' : `${n.color}30`)}`,
+                  opacity: n.read ? 0.7 : 1,
+                  transition: 'all 0.2s',
+                  cursor: isClickable ? 'pointer' : 'default',
+                }}
+              >
               <div
                 style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: `${n.color}20`, border: `1px solid ${n.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}
                 aria-hidden="true"
@@ -73,7 +111,8 @@ export function NotificationsTab({ notifications, onMarkRead }: NotificationsTab
                 />
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

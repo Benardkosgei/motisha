@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Briefcase,
   CalendarCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { C } from '@/components/Logo';
 import { useLogo } from '@/lib/use-logo';
@@ -34,6 +35,7 @@ interface NavLink {
 
 const NAV_LINKS: NavLink[] = [
   { label: 'Overview',      href: '/admin',              icon: <LayoutDashboard size={16} />, section: 'overview'    },
+  { label: 'Analytics',     href: '/admin/analytics',    icon: <TrendingUp size={16} />,      section: 'analytics'   },
   { label: 'Speeches',      href: '/admin/speeches',     icon: <Mic2 size={16} />,            section: 'speeches'    },
   { label: 'Courses',       href: '/admin/courses',      icon: <BookOpen size={16} />,        section: 'courses'     },
   { label: 'Articles',      href: '/admin/articles',     icon: <FileText size={16} />,        section: 'articles'    },

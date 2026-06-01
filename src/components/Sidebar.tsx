@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import { LogOut, ShieldCheck, Menu, X, Star } from 'lucide-react';
 import { MotishaLogo } from './Logo';
 import { C } from './Logo';
-import { NavItem, NAV_ITEMS } from '@/lib/data';
+import { NavItem, NAV_ITEMS, type NavTarget } from '@/lib/data';
 import type { Profile } from '@/lib/auth-context';
 
 interface SidebarProps {
   active: NavItem;
-  onNav: (id: NavItem) => void;
+  onNav: (id: NavTarget) => void;
   notifCount: number;
   profile: Profile | null;
   onSignOut: () => void;

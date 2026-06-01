@@ -13,6 +13,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 interface NewslettersTabProps {
   profile: Profile | null;
+  initialId?: string | undefined;
 }
 
 interface Newsletter {
@@ -298,7 +299,7 @@ function NewsletterDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function NewslettersTab({ profile }: NewslettersTabProps) {
+export function NewslettersTab({ profile, initialId }: NewslettersTabProps) {
   const { session } = useAuth();
   const [newsletters, setNewsletters] = useState<Newsletter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -330,6 +331,12 @@ export function NewslettersTab({ profile }: NewslettersTabProps) {
   }, [session]);
 
   useEffect(() => { fetchNewsletters(); }, [fetchNewsletters]);
+
+  useEffect(() => {
+    if (!initialId || newsletters.length === 0) return;
+    const found = newsletters.find(n => n.id === initialId);
+    if (found) setSelected(found);
+  }, [newsletters, initialId]);
 
   const columns = useMemo<ColumnDef<Newsletter, unknown>[]>(() => [
     {

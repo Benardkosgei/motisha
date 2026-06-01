@@ -27,6 +27,9 @@ export const TYPE_COLORS: Record<string, string> = {
 
 export type NavItem = 'home' | 'profile' | 'calendar' | 'courses' | 'referral' | 'book-service' | 'resources' | 'pricing' | 'notifications' | 'speeches' | 'articles' | 'newsletters';
 
+// Navigation target can be a simple tab id or an object pointing to a tab and specific item id
+export type NavTarget = NavItem | { tab: NavItem; id?: string };
+
 export interface NavItemDef {
   id: NavItem;
   label: string;

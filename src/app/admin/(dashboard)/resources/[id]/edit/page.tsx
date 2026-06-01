@@ -14,10 +14,13 @@ interface Resource {
   premium: boolean;
   status: string;
   file_url: string | null;
+  file_urls?: string[] | null;
   week: string | null;
 }
 
 const RESOURCE_TYPES = ['Resource', 'Guide', 'Template'];
+const MAX_FILES = 5;
+const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.ppt', '.pptx'];
 
 function DeleteDialog({
   resource,
@@ -103,6 +106,9 @@ export default function EditResourcePage() {
   const [icon, setIcon] = useState('📚');
   const [description, setDescription] = useState('');
   const [fileUrl, setFileUrl] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [existingFiles, setExistingFiles] = useState<string[]>([]);
+  const [clearExisting, setClearExisting] = useState(false);
   const [premium, setPremium] = useState(false);
   const [status, setStatus] = useState('draft');
 
@@ -137,6 +143,7 @@ export default function EditResourcePage() {
         setIcon(data.icon);
         setDescription(data.description ?? '');
         setFileUrl(data.file_url ?? '');
+        setExistingFiles(data.file_urls?.length ? data.file_urls : data.file_url ? [data.file_url] : []);
         setPremium(data.premium);
         setStatus(data.status ?? 'draft');
       } catch (err) {
@@ -150,22 +157,30 @@ export default function EditResourcePage() {
 
   async function handleSave(newStatus?: string) {
     if (!title.trim()) { setSaveError('Title is required'); return; }
+    if (selectedFiles.length > MAX_FILES) {
+      setSaveError(`You may upload up to ${MAX_FILES} files.`);
+      return;
+    }
     setSaving(true);
     setSaveError('');
     setSuccessMsg('');
     try {
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      formData.append('type', type);
+      formData.append('icon', icon);
+      formData.append('description', description.trim());
+      formData.append('file_url', fileUrl.trim() || '');
+      formData.append('premium', String(premium));
+      formData.append('status', newStatus ?? status);
+      if (clearExisting || selectedFiles.length > 0) {
+        formData.append('clear_files', 'true');
+      }
+      selectedFiles.forEach(file => formData.append('files', file));
+
       const res = await fetch(`/api/admin/resources/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          type,
-          icon,
-          description: description.trim(),
-          file_url: fileUrl.trim() || null,
-          premium,
-          status: newStatus ?? status,
-        }),
+        body: formData,
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -174,6 +189,9 @@ export default function EditResourcePage() {
       const updated: Resource = await res.json();
       setResource(updated);
       setStatus(updated.status);
+      setExistingFiles(updated.file_urls?.length ? updated.file_urls : updated.file_url ? [updated.file_url] : []);
+      setSelectedFiles([]);
+      setClearExisting(false);
       setSuccessMsg(newStatus === 'published' ? 'Resource published.' : 'Changes saved.');
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
@@ -354,6 +372,39 @@ export default function EditResourcePage() {
         </div>
 
         <div>
+          <label htmlFor="resource-files" style={{ display: 'block', color: C.offWhite, fontSize: '0.8rem', fontWeight: 600, marginBottom: 6 }}>
+            Replace attached files (optional, max {MAX_FILES})
+          </label>
+          <input
+            id="resource-files"
+            type="file"
+            multiple
+            accept={ALLOWED_FILE_TYPES.join(',')}
+            onChange={e => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length > MAX_FILES) {
+                setSaveError(`You may upload up to ${MAX_FILES} files.`);
+                return;
+              }
+              setSaveError('');
+              setSelectedFiles(files);
+              setClearExisting(true);
+            }}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          />
+          {selectedFiles.length > 0 && (
+            <div style={{ marginTop: 10, color: C.gray, fontSize: '0.82rem' }}>
+              {selectedFiles.map(file => (
+                <div key={`${file.name}-${file.size}`}>{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</div>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 8, color: C.grayDark, fontSize: '0.72rem' }}>
+            Supported: {ALLOWED_FILE_TYPES.join(', ').replace(/\.(?=[^,]*,|$)/g, '.')}.
+          </div>
+        </div>
+
+        <div>
           <label style={{ display: 'block', color: C.offWhite, fontSize: '0.8rem', fontWeight: 600, marginBottom: 6 }}>
             File URL (optional)
           </label>
@@ -364,6 +415,23 @@ export default function EditResourcePage() {
             style={inputStyle}
             placeholder="https://…"
           />
+          {existingFiles.length > 0 && !clearExisting && (
+            <div style={{ marginTop: 12, color: C.gray, fontSize: '0.82rem' }}>
+              Existing attachments:
+              <ul style={{ margin: '6px 0 0 16px', padding: 0, listStyle: 'disc', color: C.gray }}>
+                {existingFiles.map((url, index) => (
+                  <li key={index} style={{ marginBottom: 4, overflowWrap: 'anywhere' }}>{url}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => { setClearExisting(true); setExistingFiles([]); }}
+                style={{ marginTop: 8, background: 'none', border: 'none', color: C.teal, cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
+              >
+                Clear existing files
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>

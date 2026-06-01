@@ -59,6 +59,9 @@ export async function PATCH(request: NextRequest) {
     const mpesaShortcode        = formData.get('mpesa_shortcode') as string | null;
     const mpesaCallbackUrl      = formData.get('mpesa_callback_url') as string | null;
     const mpesaEnv              = formData.get('mpesa_env') as string | null;
+    const mpesaConsumerKey      = formData.get('mpesa_consumer_key') as string | null;
+    const mpesaConsumerSecret   = formData.get('mpesa_consumer_secret') as string | null;
+    const mpesaPasskey          = formData.get('mpesa_passkey') as string | null;
     const referralRateIndividual = formData.get('referral_rate_individual') as string | null;
     const referralRateAdmin     = formData.get('referral_rate_admin') as string | null;
     const logoFile              = formData.get('logo') as File | null;
@@ -182,7 +185,8 @@ export async function PATCH(request: NextRequest) {
       updates.push({ key: 'notifications_enabled', value: { enabled: notificationsEnabled === 'true' } });
 
     // ── M-Pesa settings ───────────────────────────────────────────────────────
-    if (mpesaShortcode !== null || mpesaCallbackUrl !== null || mpesaEnv !== null) {
+    if (mpesaShortcode !== null || mpesaCallbackUrl !== null || mpesaEnv !== null ||
+        mpesaConsumerKey !== null || mpesaConsumerSecret !== null || mpesaPasskey !== null) {
       // Fetch existing mpesa config to merge
       const { data: existing } = await supabaseAdmin
         .from('system_settings')
@@ -194,6 +198,10 @@ export async function PATCH(request: NextRequest) {
       if (mpesaShortcode !== null) merged.shortcode = mpesaShortcode;
       if (mpesaCallbackUrl !== null) merged.callback_url = mpesaCallbackUrl;
       if (mpesaEnv !== null) merged.env = mpesaEnv;
+      // Only update secrets if a non-empty value was submitted (preserve existing if blank)
+      if (mpesaConsumerKey !== null && mpesaConsumerKey.trim() !== '') merged.consumer_key = mpesaConsumerKey;
+      if (mpesaConsumerSecret !== null && mpesaConsumerSecret.trim() !== '') merged.consumer_secret = mpesaConsumerSecret;
+      if (mpesaPasskey !== null && mpesaPasskey.trim() !== '') merged.passkey = mpesaPasskey;
       updates.push({ key: 'mpesa_config', value: merged });
     }
 

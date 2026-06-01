@@ -63,6 +63,11 @@ export async function POST(request: NextRequest) {
     const icon = (formData.get('icon') as string | null)?.trim() ?? '';
     const premium = formData.get('premium') === 'true';
     const week = (formData.get('week') as string | null)?.trim() ?? '';
+    const slideEnabled = formData.get('slide_enabled') === 'true';
+    const slideTitle = (formData.get('slide_title') as string | null)?.trim() ?? '';
+    const slideTag = (formData.get('slide_tag') as string | null)?.trim() ?? '';
+    const slideSub = (formData.get('slide_sub') as string | null)?.trim() ?? '';
+    const slideAccent = (formData.get('slide_accent') as string | null)?.trim() ?? '';
     const action = (formData.get('action') as string | null) ?? 'draft';
     const publishAtRaw = formData.get('publish_at') as string | null;
     const file = formData.get('file') as File | null;
@@ -115,6 +120,11 @@ export async function POST(request: NextRequest) {
       icon,
       premium,
       week,
+      slide_enabled: slideEnabled,
+      slide_title: slideTitle || null,
+      slide_tag: slideTag || null,
+      slide_sub: slideSub || null,
+      slide_accent: slideAccent || null,
       status: isPublishNow ? 'published' : 'draft',
       publish_at: isPublishNow ? now : (publishAtRaw || null),
       published_at: isPublishNow ? now : null,

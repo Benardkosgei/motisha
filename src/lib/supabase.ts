@@ -61,6 +61,14 @@ export interface Content {
   week: string | null
   modules: number
   file_url?: string | null
+  /** hero slider metadata */
+  slide_enabled?: boolean
+  slide_title?: string | null
+  slide_tag?: string | null
+  slide_sub?: string | null
+  slide_accent?: string | null
+  /** Uploaded resource attachments */
+  file_urls?: string[] | null
   /** draft | published */
   status?: string
   publish_at?: string | null
@@ -104,6 +112,8 @@ export interface Notification {
   read: boolean
   created_at: string
   user_id: string
+  content_type?: string | null
+  content_id?: string | null
 }
 
 export interface Referral {

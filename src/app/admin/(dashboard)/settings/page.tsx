@@ -28,7 +28,7 @@ interface SystemSettings {
     sender_address?: string;
   };
   notifications_enabled?: { enabled: boolean };
-  mpesa_config?: { shortcode?: string; callback_url?: string; env?: string };
+  mpesa_config?: { shortcode?: string; callback_url?: string; env?: string; consumer_key?: string; consumer_secret?: string; passkey?: string };
   referral_rates?: { individual?: number; admin?: number };
   contact_info?: { owner_name?: string; whatsapp?: string; email?: string; support_email?: string; response_hours?: number };
   bank_details?: { bank_name?: string; account_name?: string; account_number?: string; branch?: string };
@@ -510,6 +510,9 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
   const [shortcode, setShortcode] = useState(cfg.shortcode ?? '');
   const [callbackUrl, setCallbackUrl] = useState(cfg.callback_url ?? '');
   const [env, setEnv] = useState(cfg.env ?? 'sandbox');
+  const [consumerKey, setConsumerKey] = useState(cfg.consumer_key ?? '');
+  const [consumerSecret, setConsumerSecret] = useState(cfg.consumer_secret ?? '');
+  const [passkey, setPasskey] = useState(cfg.passkey ?? '');
   const [busy, setBusy] = useState(false);
   const [ok, setOk] = useState('');
   const [err, setErr] = useState('');
@@ -523,6 +526,9 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
       fd.append('mpesa_shortcode', shortcode);
       fd.append('mpesa_callback_url', callbackUrl);
       fd.append('mpesa_env', env);
+      fd.append('mpesa_consumer_key', consumerKey);
+      fd.append('mpesa_consumer_secret', consumerSecret);
+      fd.append('mpesa_passkey', passkey);
       const r = await fetch('/api/admin/settings', { method: 'PATCH', body: fd });
       if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Failed'); }
       onSaved(await r.json());
@@ -535,14 +541,9 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
       {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
       <div style={crd}>
         <SecTitle icon={Smartphone} label="M-Pesa Daraja Configuration" />
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.2)', marginBottom: 12 }}>
-          <p style={{ color: C.mustard, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
-            Consumer Key and Consumer Secret are stored in <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code> for security. Only non-secret config is stored here.
-          </p>
-        </div>
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 20 }}>
-          <p style={{ color: C.danger, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
-            <strong>⚠ Important:</strong> The shortcode and callback URL saved here are for reference only. The live M-Pesa payment routes read credentials exclusively from <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code> (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_SHORTCODE</code>, <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_CALLBACK_URL</code>, etc.). Update those env vars and redeploy to change live payment behaviour.
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(14,165,233,0.07)', border: '1px solid rgba(14,165,233,0.2)', marginBottom: 20 }}>
+          <p style={{ color: C.teal, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
+            All M-Pesa credentials are saved here and used directly by the payment routes. You can also set them as environment variables (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_CONSUMER_KEY</code>, <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 3 }}>MPESA_CONSUMER_SECRET</code>, etc.) as a fallback.
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
@@ -555,6 +556,21 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
             <label style={lbl}><Globe size={13} />Callback URL</label>
             <input type="url" value={callbackUrl} onChange={e => setCallbackUrl(e.target.value)} placeholder="https://yourdomain.com/api/payments/mpesa/callback" style={inp} />
             <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Must be a public HTTPS URL. Safaricom posts payment confirmations here.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Shield size={13} />Consumer Key</label>
+            <input type="text" value={consumerKey} onChange={e => setConsumerKey(e.target.value)} placeholder="Daraja app consumer key" style={inp} autoComplete="off" />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>From your app on developer.safaricom.co.ke.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Shield size={13} />Consumer Secret</label>
+            <input type="password" value={consumerSecret} onChange={e => setConsumerSecret(e.target.value)} placeholder="Daraja app consumer secret" style={inp} autoComplete="off" />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Keep this confidential.</p>
+          </div>
+          <div style={fld}>
+            <label style={lbl}><Shield size={13} />Passkey</label>
+            <input type="password" value={passkey} onChange={e => setPasskey(e.target.value)} placeholder="Lipa Na M-Pesa Online passkey" style={inp} autoComplete="off" />
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Provided by Safaricom for STK push.</p>
           </div>
         </div>
         <div style={fld}>

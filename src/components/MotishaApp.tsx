@@ -7,7 +7,7 @@ import { Sidebar } from './Sidebar';
 import { AuthScreen } from './AuthScreen';
 import { ThemeToggle } from './ThemeToggle';
 import { C } from './Logo';
-import { NavItem, NAV_ITEMS } from '@/lib/data';
+import { NavItem, NAV_ITEMS, NavTarget } from '@/lib/data';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import type { Notification } from '@/lib/supabase';
@@ -144,11 +144,20 @@ export function MotishaApp() {
     return <AuthScreen />;
   }
 
-  function handleNav(id: NavItem) {
-    // Update URL — home uses clean URL with no param
-    const url = id === 'home' ? '/' : `/?tab=${id}`;
+  function handleNav(target: NavTarget) {
+    // Accept either a NavItem or an object { tab, id }
+    let tab: NavItem;
+    let itemId: string | undefined;
+    if (typeof target === 'string') {
+      tab = target;
+    } else {
+      tab = target.tab;
+      itemId = target.id;
+    }
+    // Build URL — include id when provided
+    const url = tab === 'home' ? '/' : itemId ? `/?tab=${tab}&id=${encodeURIComponent(itemId)}` : `/?tab=${tab}`;
     router.push(url);
-    setVisited(prev => new Set(prev).add(id));
+    setVisited(prev => new Set(prev).add(tab));
   }
 
   function tabStyle(id: NavItem): React.CSSProperties {
@@ -304,7 +313,7 @@ export function MotishaApp() {
         <div style={tabStyle('courses')}>
           {visited.has('courses') && (
             <Suspense fallback={<TabSkeleton />}>
-              <CoursesTab />
+              <CoursesTab initialId={searchParams.get('id') ?? undefined} />
             </Suspense>
           )}
         </div>
@@ -336,7 +345,7 @@ export function MotishaApp() {
         <div style={tabStyle('speeches')}>
           {visited.has('speeches') && (
             <Suspense fallback={<TabSkeleton />}>
-              <SpeechesTab profile={profile} />
+              <SpeechesTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
             </Suspense>
           )}
         </div>
@@ -344,7 +353,7 @@ export function MotishaApp() {
         <div style={tabStyle('articles')}>
           {visited.has('articles') && (
             <Suspense fallback={<TabSkeleton />}>
-              <ArticlesTab profile={profile} />
+              <ArticlesTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
             </Suspense>
           )}
         </div>
@@ -352,7 +361,7 @@ export function MotishaApp() {
         <div style={tabStyle('newsletters')}>
           {visited.has('newsletters') && (
             <Suspense fallback={<TabSkeleton />}>
-              <NewslettersTab profile={profile} />
+              <NewslettersTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
             </Suspense>
           )}
         </div>

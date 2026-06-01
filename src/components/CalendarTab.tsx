@@ -6,7 +6,7 @@ import { TYPE_COLORS } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import type { Profile } from '@/lib/auth-context';
-import type { NavItem } from '@/lib/data';
+import type { NavItem, NavTarget } from '@/lib/data';
 
 interface ContentItem {
   id: string;
@@ -24,7 +24,7 @@ interface ContentItem {
 
 interface CalendarTabProps {
   profile: Profile | null;
-  onNav: (id: NavItem) => void;
+  onNav: (id: NavTarget) => void;
 }
 
 export function CalendarTab({ profile, onNav }: CalendarTabProps) {

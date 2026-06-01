@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation';
 import { C } from '@/components/Logo';
 
 const RESOURCE_TYPES = ['Resource', 'Guide', 'Template'];
+const MAX_FILES = 5;
+const ALLOWED_FILE_TYPES = [
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
 
 export default function NewResourcePage() {
   const router = useRouter();
@@ -17,6 +26,7 @@ export default function NewResourcePage() {
     file_url: '',
     status: 'draft',
   });
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,20 +37,50 @@ export default function NewResourcePage() {
     outline: 'none', boxSizing: 'border-box',
   };
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > MAX_FILES) {
+      setError(`You may upload up to ${MAX_FILES} files.`);
+      return;
+    }
+    setError('');
+    setSelectedFiles(files);
+  }
+
   async function handleSave() {
-    if (!form.title.trim()) { setError('Title is required'); return; }
+    if (!form.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    if (selectedFiles.length > MAX_FILES) {
+      setError(`You may upload up to ${MAX_FILES} files.`);
+      return;
+    }
+
     setSaving(true);
     setError('');
+
     try {
+      const formData = new FormData();
+      formData.append('title', form.title.trim());
+      formData.append('type', form.type);
+      formData.append('icon', form.icon);
+      formData.append('description', form.description.trim());
+      formData.append('premium', String(form.premium));
+      formData.append('status', form.status);
+      if (form.file_url.trim()) formData.append('file_url', form.file_url.trim());
+      selectedFiles.forEach(file => formData.append('files', file));
+
       const res = await fetch('/api/admin/resources', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: formData,
       });
+
       if (!res.ok) {
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Failed to create');
       }
+
       router.push('/admin/resources');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -78,6 +118,28 @@ export default function NewResourcePage() {
         <div>
           <label style={{ display: 'block', color: C.offWhite, fontSize: '0.8rem', fontWeight: 600, marginBottom: 6 }}>Description</label>
           <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Brief description of this resource…" />
+        </div>
+
+        <div>
+          <label htmlFor="resource-files" style={{ display: 'block', color: C.offWhite, fontSize: '0.8rem', fontWeight: 600, marginBottom: 6 }}>Upload files (optional, max {MAX_FILES})</label>
+          <input
+            id="resource-files"
+            type="file"
+            multiple
+            accept={ALLOWED_FILE_TYPES.join(',')}
+            onChange={handleFileChange}
+            style={{ ...inputStyle, padding: '10px 14px', cursor: 'pointer' }}
+          />
+          {selectedFiles.length > 0 && (
+            <div style={{ marginTop: 10, color: C.gray, fontSize: '0.82rem' }}>
+              {selectedFiles.map(file => (
+                <div key={file.name + file.size}>{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</div>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 8, color: C.grayDark, fontSize: '0.72rem' }}>
+            Supported: PDF, DOC, DOCX, PPT, PPTX.
+          </div>
         </div>
 
         <div>

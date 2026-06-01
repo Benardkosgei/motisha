@@ -92,6 +92,7 @@ Paste and run each file in order from `supabase/migrations/`:
 supabase login
 supabase link --project-ref your-project-ref
 supabase db push
+supabase db push --include-all
 ```
 
 ### 4. Create your first admin user

@@ -88,9 +88,27 @@ export async function PATCH(
       'icon',
       'premium',
       'week',
+      'slide_enabled',
+      'slide_title',
+      'slide_tag',
+      'slide_sub',
+      'slide_accent',
       'publish_at',
-      'status',
       'published_at',
+      'status',
+      'thumbnail_url',
+      'trailer_url',
+      'level',
+      'language',
+      'duration_hours',
+      'category',
+      'objectives',
+      'requirements',
+      'target_audience',
+      'certificate',
+      'rating',
+      'access_tier',
+      'file_urls',
     ];
 
     const updateData: Record<string, unknown> = {};
@@ -117,15 +135,20 @@ export async function PATCH(
       .single();
 
     if (error) {
+      console.error('[admin/articles/[id]] PATCH error:', error.message || error, 'Code:', error.code);
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Article not found' }, { status: 404 });
       }
-      throw error;
+      // Return database error for debugging
+      return NextResponse.json(
+        { error: error.message || 'Database error while updating' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('[admin/articles/[id]] PATCH error:', error);
+    console.error('[admin/articles/[id]] PATCH error details:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { error: 'Failed to update article' },
       { status: 500 }

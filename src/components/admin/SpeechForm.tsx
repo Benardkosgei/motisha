@@ -22,6 +22,11 @@ export interface SpeechData {
   icon?: string;
   premium?: boolean;
   week?: string;
+  slide_enabled?: boolean;
+  slide_title?: string | null;
+  slide_tag?: string | null;
+  slide_sub?: string | null;
+  slide_accent?: string | null;
   publish_at?: string | null;
   status?: 'draft' | 'published';
 }
@@ -75,6 +80,11 @@ export function SpeechForm({ initialData = {}, onSuccess, mode }: SpeechFormProp
   const [icon, setIcon] = useState(initialData.icon ?? '');
   const [premium, setPremium] = useState(initialData.premium ?? false);
   const [week, setWeek] = useState(initialData.week ?? '');
+  const [slideEnabled, setSlideEnabled] = useState(initialData.slide_enabled ?? false);
+  const [slideTitle, setSlideTitle] = useState(initialData.slide_title ?? '');
+  const [slideTag, setSlideTag] = useState(initialData.slide_tag ?? '');
+  const [slideSub, setSlideSub] = useState(initialData.slide_sub ?? '');
+  const [slideAccent, setSlideAccent] = useState(initialData.slide_accent ?? '#0EA5E9');
   const [publishAt, setPublishAt] = useState(toEATInputValue(initialData.publish_at));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -118,6 +128,11 @@ export function SpeechForm({ initialData = {}, onSuccess, mode }: SpeechFormProp
         icon: icon || null,
         premium,
         week: week.trim() || null,
+        slide_enabled: slideEnabled,
+        slide_title: slideTitle.trim() || null,
+        slide_tag: slideTag.trim() || null,
+        slide_sub: slideSub.trim() || null,
+        slide_accent: slideAccent.trim() || null,
         publish_at: action === 'publish' ? now : (publishAt ? fromEATInputValue(publishAt) : null),
         status: action === 'publish' ? 'published' : 'draft',
         ...(action === 'publish' ? { published_at: now } : {}),
@@ -208,6 +223,75 @@ export function SpeechForm({ initialData = {}, onSuccess, mode }: SpeechFormProp
           disabled={submitting}
           maxLength={10}
         />
+      </div>
+
+      {/* Home slide */}
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Feature on home slider</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.white, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={slideEnabled}
+              onChange={e => setSlideEnabled(e.target.checked)}
+              disabled={submitting}
+              style={{ width: 16, height: 16, accentColor: C.teal, cursor: 'pointer' }}
+            />
+            Add this content as a hero slide
+          </label>
+        </div>
+        {slideEnabled && (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div>
+              <label htmlFor="speech-slide-title" style={labelStyle}>Slide title</label>
+              <input
+                id="speech-slide-title"
+                type="text"
+                value={slideTitle}
+                onChange={e => setSlideTitle(e.target.value)}
+                placeholder="Override title shown on the hero slide"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="speech-slide-tag" style={labelStyle}>Slide badge</label>
+              <input
+                id="speech-slide-tag"
+                type="text"
+                value={slideTag}
+                onChange={e => setSlideTag(e.target.value)}
+                placeholder="e.g. FEATURED SPEECH"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="speech-slide-sub" style={labelStyle}>Slide subtitle</label>
+              <input
+                id="speech-slide-sub"
+                type="text"
+                value={slideSub}
+                onChange={e => setSlideSub(e.target.value)}
+                placeholder="Short summary shown on the slide"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="speech-slide-accent" style={labelStyle}>Slide accent</label>
+              <input
+                id="speech-slide-accent"
+                type="text"
+                value={slideAccent}
+                onChange={e => setSlideAccent(e.target.value)}
+                placeholder="#0EA5E9"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Week — term-aware picker */}

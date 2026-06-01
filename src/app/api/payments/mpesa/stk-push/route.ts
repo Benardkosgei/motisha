@@ -1,26 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+// ─── M-Pesa config loader ─────────────────────────────────────────────────────
+
+interface MpesaConfig {
+  consumerKey: string;
+  consumerSecret: string;
+  shortcode: string;
+  passkey: string;
+  callbackUrl: string;
+  env: string; // 'sandbox' | 'production'
+}
+
+/**
+ * Loads M-Pesa credentials from system_settings (DB), falling back to env vars.
+ * The admin dashboard saves consumer key/secret under the `mpesa_config` key.
+ */
+async function loadMpesaConfig(): Promise<MpesaConfig> {
+  // Try DB first
+  const { data } = await supabaseAdmin
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'mpesa_config')
+    .single();
+
+  const db = (data?.value ?? {}) as Record<string, string>;
+
+  const consumerKey   = db.consumer_key    || process.env.MPESA_CONSUMER_KEY    || '';
+  const consumerSecret= db.consumer_secret || process.env.MPESA_CONSUMER_SECRET || '';
+  const shortcode     = db.shortcode       || process.env.MPESA_SHORTCODE       || '';
+  const passkey       = db.passkey         || process.env.MPESA_PASSKEY         || '';
+  const callbackUrl   = db.callback_url    || process.env.MPESA_CALLBACK_URL    || '';
+  const env           = db.env             || process.env.MPESA_ENV             || 'sandbox';
+
+  if (!consumerKey || !consumerSecret) {
+    throw new Error('M-Pesa consumer key/secret not configured. Set them in Admin → Settings → M-Pesa or in environment variables.');
+  }
+  if (!shortcode || !passkey) {
+    throw new Error('M-Pesa shortcode or passkey not configured.');
+  }
+  if (!callbackUrl) {
+    throw new Error('M-Pesa callback URL not configured.');
+  }
+
+  return { consumerKey, consumerSecret, shortcode, passkey, callbackUrl, env };
+}
+
 // ─── Daraja API helpers ───────────────────────────────────────────────────────
 
-async function getDarajaToken(): Promise<string> {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY!;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET!;
-  const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+async function getDarajaToken(config: MpesaConfig): Promise<string> {
+  const credentials = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
 
-  // Use the correct base URL depending on environment
-  const isDev = process.env.MPESA_ENV !== 'production';
-  const tokenUrl = isDev
-    ? 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-    : 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+  const isProduction = config.env === 'production';
+  const tokenUrl = isProduction
+    ? 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+    : 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
 
   const res = await fetch(tokenUrl, {
     headers: { Authorization: `Basic ${credentials}` },
     cache: 'no-store',
   });
 
-  if (!res.ok) throw new Error('Failed to get Daraja token');
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Failed to get Daraja token (${res.status}): ${body}`);
+  }
   const data = await res.json();
+  if (!data.access_token) {
+    throw new Error(`Daraja token response missing access_token: ${JSON.stringify(data)}`);
+  }
   return data.access_token as string;
 }
 
@@ -63,16 +111,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const shortcode = process.env.MPESA_SHORTCODE!;
-    const passkey = process.env.MPESA_PASSKEY!;
-    const callbackUrl = process.env.MPESA_CALLBACK_URL!;
-    const isDev = process.env.MPESA_ENV !== 'production';
+    const mpesaConfig = await loadMpesaConfig();
+    const { shortcode, passkey, callbackUrl } = mpesaConfig;
+    const isProduction = mpesaConfig.env === 'production';
 
-    const baseUrl = isDev
-      ? 'https://sandbox.safaricom.co.ke'
-      : 'https://api.safaricom.co.ke';
+    const baseUrl = isProduction
+      ? 'https://api.safaricom.co.ke'
+      : 'https://sandbox.safaricom.co.ke';
 
-    const token = await getDarajaToken();
+    const token = await getDarajaToken(mpesaConfig);
     const timestamp = getTimestamp();
     const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
     const formattedPhone = formatPhone(phone);

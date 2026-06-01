@@ -34,7 +34,8 @@
 -- public.contents
 --   Weekly content calendar items (speeches, newsletters, etc.)
 --   Columns: id, title, type, icon, description, premium,
---            pdf_available, week, modules, file_url, created_at
+--            pdf_available, week, slide_enabled, slide_title,
+--            slide_tag, slide_sub, slide_accent, modules, file_url, created_at
 --
 -- public.user_courses
 --   Per-user course progress tracking.
@@ -55,6 +56,11 @@
 --   Content submitted by teacher-authors for review.
 --   Columns: id, user_id, title, type, description, file_url,
 --            status, earnings, created_at
+--
+-- public.site_visits
+--   Public site traffic events captured for admin analytics.
+--   Columns: id, path, page_title, referrer, user_agent,
+--            ip_address, device, created_at
 --
 -- ============================================================
 -- VIEWS

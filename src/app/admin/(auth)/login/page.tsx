@@ -130,7 +130,7 @@ export default function AdminLoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username"
-                  placeholder="admin@motisha.com"
+                  placeholder="admin@motisha.co.ke"
                   disabled={loading}
                   style={{
                     width: '100%',

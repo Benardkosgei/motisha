@@ -49,14 +49,16 @@ BEGIN
     CASE WHEN NEW.week IS NOT NULL AND NEW.week != '' THEN ' Week ' || NEW.week ELSE '' END ||
     ' · ' || NEW.type || 's · ' || v_premium_text;
 
-  -- Insert notification for all active users
-  INSERT INTO public.notifications (user_id, title, body, icon, color)
+  -- Insert notification for all active users with content reference
+  INSERT INTO public.notifications (user_id, title, body, icon, color, content_type, content_id)
   SELECT
     p.id,
     v_title,
     v_body,
     v_icon,
-    v_color
+    v_color,
+    NEW.type,
+    NEW.id
   FROM public.profiles p
   WHERE p.status = 'active' OR p.status IS NULL;
 

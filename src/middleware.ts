@@ -57,6 +57,7 @@ export async function middleware(request: NextRequest) {
   // Enforce section-level access for restricted roles
   const role = payload.role ?? 'super_admin';
   const sectionMap: Record<string, AdminNavSection> = {
+    '/admin/analytics': 'analytics',
     '/admin/users':     'users',
     '/admin/revenue':   'revenue',
     '/admin/plans':     'plans',

@@ -3,14 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarDays, GraduationCap, Gift, Briefcase, Play, Download } from 'lucide-react';
 import { C } from './Logo';
-import type { NavItem } from '@/lib/data';
+import type { NavItem, NavTarget } from '@/lib/data';
 import type { Profile } from '@/lib/auth-context';
 import { useCourses } from '@/lib/use-courses';
 import { useAuth } from '@/lib/auth-context';
 import { usePublicSettings } from '@/lib/use-public-settings';
 
 interface HomeTabProps {
-  onNav: (id: NavItem) => void;
+  onNav: (target: NavTarget) => void;
   profile: Profile | null;
 }
 
@@ -62,13 +62,13 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
           <p style={{ color: '#CBD5E1', fontSize: '0.82rem', marginBottom: 20, maxWidth: 380 }}>{h.sub}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => onNav(h.nav as NavItem)}
+              onClick={() => onNav({ tab: h.nav as NavItem, id: (h as any).id })}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard || h.accent === '#F5A623' ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
             >
               <Play size={13} fill="currentColor" /> Open Now
             </button>
             <button
-              onClick={() => onNav('calendar' as NavItem)}
+              onClick={() => onNav(h.nav as NavItem)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', background: 'rgba(255,255,255,0.1)', color: C.white, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
             >
               <Download size={13} /> Browse All

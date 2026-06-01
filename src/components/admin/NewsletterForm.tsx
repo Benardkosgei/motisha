@@ -25,6 +25,11 @@ export interface NewsletterData {
   icon?: string;
   premium?: boolean;
   week?: string;
+  slide_enabled?: boolean;
+  slide_title?: string | null;
+  slide_tag?: string | null;
+  slide_sub?: string | null;
+  slide_accent?: string | null;
   publish_at?: string | null;
   status?: 'draft' | 'published';
   file_url?: string | null;
@@ -114,6 +119,11 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
   const [icon, setIcon] = useState(initialData.icon ?? '');
   const [premium, setPremium] = useState(initialData.premium ?? false);
   const [week, setWeek] = useState(initialData.week ?? '');
+  const [slideEnabled, setSlideEnabled] = useState(initialData.slide_enabled ?? false);
+  const [slideTitle, setSlideTitle] = useState(initialData.slide_title ?? '');
+  const [slideTag, setSlideTag] = useState(initialData.slide_tag ?? '');
+  const [slideSub, setSlideSub] = useState(initialData.slide_sub ?? '');
+  const [slideAccent, setSlideAccent] = useState(initialData.slide_accent ?? '#0EA5E9');
   const [publishAt, setPublishAt] = useState(toEATInputValue(initialData.publish_at));
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
@@ -169,6 +179,11 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
       formData.append('icon', icon.trim());
       formData.append('premium', String(premium));
       formData.append('week', week.trim());
+      formData.append('slide_enabled', String(slideEnabled));
+      formData.append('slide_title', slideTitle.trim());
+      formData.append('slide_tag', slideTag.trim());
+      formData.append('slide_sub', slideSub.trim());
+      formData.append('slide_accent', slideAccent.trim());
       formData.append('action', action);
       if (publishAt) formData.append('publish_at', fromEATInputValue(publishAt));
       if (file) formData.append('file', file);
@@ -273,6 +288,75 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
         </div>
         <input type="text" value={icon} onChange={e => setIcon(e.target.value)} placeholder="Or type a custom emoji"
           style={{ ...inputStyle, width: 200 }} />
+      </div>
+
+      {/* Home slide */}
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Feature on home slider</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.white, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={slideEnabled}
+              onChange={e => setSlideEnabled(e.target.checked)}
+              disabled={submitting}
+              style={{ width: 16, height: 16, accentColor: C.teal, cursor: 'pointer' }}
+            />
+            Add this content as a hero slide
+          </label>
+        </div>
+        {slideEnabled && (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div>
+              <label htmlFor="newsletter-slide-title" style={labelStyle}>Slide title</label>
+              <input
+                id="newsletter-slide-title"
+                type="text"
+                value={slideTitle}
+                onChange={e => setSlideTitle(e.target.value)}
+                placeholder="Override title shown on the hero slide"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="newsletter-slide-tag" style={labelStyle}>Slide badge</label>
+              <input
+                id="newsletter-slide-tag"
+                type="text"
+                value={slideTag}
+                onChange={e => setSlideTag(e.target.value)}
+                placeholder="e.g. FEATURED NEWSLETTER"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="newsletter-slide-sub" style={labelStyle}>Slide subtitle</label>
+              <input
+                id="newsletter-slide-sub"
+                type="text"
+                value={slideSub}
+                onChange={e => setSlideSub(e.target.value)}
+                placeholder="Short summary shown on the slide"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label htmlFor="newsletter-slide-accent" style={labelStyle}>Slide accent</label>
+              <input
+                id="newsletter-slide-accent"
+                type="text"
+                value={slideAccent}
+                onChange={e => setSlideAccent(e.target.value)}
+                placeholder="#0EA5E9"
+                style={inputStyle}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Week — term-aware picker */}

@@ -19,10 +19,13 @@ const KENYA_COUNTIES = [
 ];
 
 const JOB_TITLES = [
-  'Teacher',
+  'Principal',
+  'Deputy Principal',
   'Senior Teacher',
-  'Deputy Headteacher',
-  'Headteacher',
+  'DoS',
+  'Teacher',
+  'HoD GnC',
+  'Teacher',
   'Other',
 ];
 
