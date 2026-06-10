@@ -33,18 +33,18 @@ export function RevenueByPlanChart({ data }: RevenueByPlanChartProps) {
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
-        <XAxis dataKey="month" tick={{ fill: CHART_THEME.axis, fontSize: 11 }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="month" tick={CHART_THEME.axis.tick} axisLine={CHART_THEME.axis.axisLine} tickLine={CHART_THEME.axis.tickLine} />
         <YAxis
-          tick={{ fill: CHART_THEME.axis, fontSize: 11 }}
-          axisLine={false}
-          tickLine={false}
+          tick={CHART_THEME.axis.tick}
+          axisLine={CHART_THEME.axis.axisLine}
+          tickLine={CHART_THEME.axis.tickLine}
           tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
         />
         <Tooltip
           contentStyle={{ background: CHART_THEME.tooltipBg, border: `1px solid ${CHART_THEME.tooltipBorder}`, borderRadius: 8, color: CHART_THEME.tooltipText, fontSize: 12 }}
           formatter={(value: number) => [`KES ${value.toLocaleString()}`, undefined]}
         />
-        <Legend wrapperStyle={{ fontSize: 12, color: CHART_THEME.axis }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: CHART_THEME.axis.tick.fill }} />
         <Bar dataKey="pro" name="Pro" fill={CHART_THEME.colors[0]} radius={[4, 4, 0, 0]} />
         <Bar dataKey="school" name="School" fill={CHART_THEME.colors[2]} radius={[4, 4, 0, 0]} />
       </BarChart>

@@ -34,13 +34,17 @@ export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
           .from('contents')
           .select('title, type, week, premium')
           .eq('status', 'published')
+          .eq('access_tier', 'free') // Only fetch free content for popup (accessible to all)
           .order('published_at', { ascending: false })
-          .limit(1)
-          .single();
+          .limit(1);
 
-        if (result.data) setContent(result.data as LatestContent);
-      } catch {
+        // Use .data directly instead of .single() to avoid 406 errors
+        if (result.data && result.data.length > 0) {
+          setContent(result.data[0] as LatestContent);
+        }
+      } catch (err) {
         // non-fatal — popup just won't show
+        console.debug('[UploadPopup] Failed to fetch latest content:', err);
       }
     };
 

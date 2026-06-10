@@ -14,6 +14,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 interface ArticlesTabProps {
   profile: Profile | null;
   initialId?: string | undefined;
+  onContentViewed?: (contentId: string) => void;
 }
 
 interface Article {
@@ -293,7 +294,7 @@ function ArticleDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function ArticlesTab({ profile, initialId }: ArticlesTabProps) {
+export function ArticlesTab({ profile, initialId, onContentViewed }: ArticlesTabProps) {
   const { session } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -328,8 +329,14 @@ export function ArticlesTab({ profile, initialId }: ArticlesTabProps) {
   useEffect(() => {
     if (!initialId || articles.length === 0) return;
     const found = articles.find(a => a.id === initialId);
-    if (found) setSelected(found);
-  }, [articles, initialId]);
+    if (found) {
+      setSelected(found);
+      // Mark related notifications as read
+      if (onContentViewed) {
+        onContentViewed(initialId);
+      }
+    }
+  }, [articles, initialId, onContentViewed]);
 
   const columns = useMemo<ColumnDef<Article, unknown>[]>(() => [
     {

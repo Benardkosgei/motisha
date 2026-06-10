@@ -110,6 +110,43 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
         })}
       </nav>
 
+      {/* Downloads quota indicator (when approaching limit) */}
+      {profile && usagePercent >= 80 && (
+        <div style={{
+          padding: '10px 14px',
+          margin: '12px 12px 0',
+          background: usagePercent >= 100 ? `${C.danger}15` : `${C.mustard}15`,
+          border: `1px solid ${usagePercent >= 100 ? C.danger : C.mustard}30`,
+          borderRadius: 10,
+          fontSize: '0.75rem',
+          color: usagePercent >= 100 ? C.danger : C.mustard,
+          fontWeight: 700,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span>📥 Downloads</span>
+            <span>{profile.downloads_used}/{profile.downloads_limit}</span>
+          </div>
+          <div style={{
+            height: 4,
+            background: 'rgba(255,255,255,0.1)',
+            borderRadius: 2,
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.min(usagePercent, 100)}%`,
+              background: usagePercent >= 100 ? C.danger : C.mustard,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          {usagePercent >= 100 && (
+            <div style={{ marginTop: 6, fontSize: '0.7rem', opacity: 0.8 }}>
+              Limit reached this month
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Footer */}
       <div style={{ padding: '12px 12px 24px', borderTop: `1px solid rgba(14,165,233,0.1)` }}>
         {/* Admin Dashboard link — only visible to admin users */}

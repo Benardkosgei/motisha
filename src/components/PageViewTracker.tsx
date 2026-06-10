@@ -21,7 +21,7 @@ export function PageViewTracker() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       keepalive: true,
-      body: JSON.stringify({ path, title, referrer }),
+      body: JSON.stringify({ path, pageTitle: title, referrer }),
     });
   }, [pathname, searchParams]);
 

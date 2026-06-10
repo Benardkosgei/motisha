@@ -26,6 +26,7 @@ export interface NewsletterData {
   premium?: boolean;
   week?: string;
   slide_enabled?: boolean;
+  slide_expires_at?: string | null;
   slide_title?: string | null;
   slide_tag?: string | null;
   slide_sub?: string | null;
@@ -120,6 +121,7 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
   const [premium, setPremium] = useState(initialData.premium ?? false);
   const [week, setWeek] = useState(initialData.week ?? '');
   const [slideEnabled, setSlideEnabled] = useState(initialData.slide_enabled ?? false);
+  const [slideExpiresAt, setSlideExpiresAt] = useState(toEATInputValue(initialData.slide_expires_at));
   const [slideTitle, setSlideTitle] = useState(initialData.slide_title ?? '');
   const [slideTag, setSlideTag] = useState(initialData.slide_tag ?? '');
   const [slideSub, setSlideSub] = useState(initialData.slide_sub ?? '');
@@ -180,6 +182,7 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
       formData.append('premium', String(premium));
       formData.append('week', week.trim());
       formData.append('slide_enabled', String(slideEnabled));
+      formData.append('slide_expires_at', slideEnabled && slideExpiresAt ? fromEATInputValue(slideExpiresAt) : '');
       formData.append('slide_title', slideTitle.trim());
       formData.append('slide_tag', slideTag.trim());
       formData.append('slide_sub', slideSub.trim());
@@ -293,7 +296,7 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
       {/* Home slide */}
       <div style={fieldStyle}>
         <label style={labelStyle}>Feature on home slider</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.white, cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -305,55 +308,82 @@ export function NewsletterForm({ initialData = {}, onSuccess, mode }: Newsletter
             Add this content as a hero slide
           </label>
         </div>
+        <p style={{ color: '#64748B', fontSize: '0.75rem', margin: '0 0 12px 24px', lineHeight: 1.5 }}>
+          Features this newsletter on the home screen carousel. Content must be published to appear.
+        </p>
         {slideEnabled && (
-          <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 14 }}>
             <div>
-              <label htmlFor="newsletter-slide-title" style={labelStyle}>Slide title</label>
-              <input
-                id="newsletter-slide-title"
-                type="text"
-                value={slideTitle}
-                onChange={e => setSlideTitle(e.target.value)}
-                placeholder="Override title shown on the hero slide"
-                style={inputStyle}
-                disabled={submitting}
-              />
+              <label htmlFor="newsletter-slide-title" style={labelStyle}>Slide title <span style={{ textTransform: 'none', fontWeight: 400, color: '#64748B' }}>(optional — defaults to content title)</span></label>
+              <input id="newsletter-slide-title" type="text" value={slideTitle} onChange={e => setSlideTitle(e.target.value)}
+                placeholder={title || 'Leave blank to use content title'} style={inputStyle} disabled={submitting} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label htmlFor="newsletter-slide-tag" style={labelStyle}>Badge / tag <span style={{ textTransform: 'none', fontWeight: 400, color: '#64748B' }}>(optional)</span></label>
+                <input id="newsletter-slide-tag" type="text" value={slideTag} onChange={e => setSlideTag(e.target.value)}
+                  placeholder="e.g. THIS WEEK" style={inputStyle} disabled={submitting} />
+              </div>
+              <div>
+                <label style={labelStyle}>Accent colour</label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {[
+                    { label: 'Amber',  value: '#F5A623' },
+                    { label: 'Teal',   value: '#0EA5E9' },
+                    { label: 'Green',  value: '#10B981' },
+                    { label: 'Purple', value: '#A855F7' },
+                    { label: 'Cyan',   value: '#06B6D4' },
+                    { label: 'Rose',   value: '#F43F5E' },
+                  ].map(p => (
+                    <button key={p.value} type="button" onClick={() => setSlideAccent(p.value)} title={p.label} disabled={submitting}
+                      style={{ width: 26, height: 26, borderRadius: '50%', background: p.value, border: `3px solid ${slideAccent === p.value ? '#fff' : 'transparent'}`, cursor: 'pointer', transition: 'border 0.15s' }} />
+                  ))}
+                  <input type="color" value={slideAccent} onChange={e => setSlideAccent(e.target.value)} disabled={submitting} title="Custom colour"
+                    style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'none' }} />
+                </div>
+              </div>
             </div>
             <div>
-              <label htmlFor="newsletter-slide-tag" style={labelStyle}>Slide badge</label>
-              <input
-                id="newsletter-slide-tag"
-                type="text"
-                value={slideTag}
-                onChange={e => setSlideTag(e.target.value)}
-                placeholder="e.g. FEATURED NEWSLETTER"
-                style={inputStyle}
-                disabled={submitting}
-              />
+              <label htmlFor="newsletter-slide-sub" style={labelStyle}>Subtitle <span style={{ textTransform: 'none', fontWeight: 400, color: '#64748B' }}>(optional — defaults to description)</span></label>
+              <input id="newsletter-slide-sub" type="text" value={slideSub} onChange={e => setSlideSub(e.target.value)}
+                placeholder={description || 'Leave blank to use description'} style={inputStyle} disabled={submitting} />
             </div>
+            {/* Expiry */}
             <div>
-              <label htmlFor="newsletter-slide-sub" style={labelStyle}>Slide subtitle</label>
+              <label htmlFor="newsletter-slide-expires" style={labelStyle}>Auto-remove slide after <span style={{ textTransform: 'none', fontWeight: 400, color: '#64748B' }}>(optional — leave blank to never expire)</span></label>
               <input
-                id="newsletter-slide-sub"
-                type="text"
-                value={slideSub}
-                onChange={e => setSlideSub(e.target.value)}
-                placeholder="Short summary shown on the slide"
+                id="newsletter-slide-expires"
+                type="datetime-local"
+                value={slideExpiresAt}
+                onChange={e => setSlideExpiresAt(e.target.value)}
                 style={inputStyle}
                 disabled={submitting}
               />
+              {!slideExpiresAt && (
+                <button type="button" onClick={() => { const d = new Date(Date.now() + 10 * 24 * 3600 * 1000); setSlideExpiresAt(new Date(d.getTime() + 3 * 3600000).toISOString().slice(0, 16)); }}
+                  style={{ marginTop: 6, fontSize: '0.75rem', color: C.teal, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                  Set to 10 days from now
+                </button>
+              )}
+              {slideExpiresAt && (
+                <button type="button" onClick={() => setSlideExpiresAt('')}
+                  style={{ marginTop: 6, fontSize: '0.75rem', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                  Remove expiry (never expires)
+                </button>
+              )}
             </div>
-            <div>
-              <label htmlFor="newsletter-slide-accent" style={labelStyle}>Slide accent</label>
-              <input
-                id="newsletter-slide-accent"
-                type="text"
-                value={slideAccent}
-                onChange={e => setSlideAccent(e.target.value)}
-                placeholder="#0EA5E9"
-                style={inputStyle}
-                disabled={submitting}
-              />
+            {/* Live preview */}
+            <div style={{ borderRadius: 12, overflow: 'hidden', position: 'relative', minHeight: 120 }}>
+              <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, #0D1B2E, #1A2E10, #0D3020)` }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.6) 60%, transparent)' }} />
+              <div style={{ position: 'relative', padding: '20px 22px', zIndex: 1 }}>
+                <span style={{ background: `${slideAccent}25`, color: slideAccent, border: `1px solid ${slideAccent}40`, fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: 5, letterSpacing: '0.1em' }}>
+                  {slideTag || 'NEWSLETTER'}
+                </span>
+                <div style={{ fontSize: '1.6rem', margin: '6px 0 4px' }}>{icon || '📮'}</div>
+                <div style={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem', marginBottom: 4 }}>{slideTitle || title || 'Slide Title'}</div>
+                <div style={{ color: '#94A3B8', fontSize: '0.72rem' }}>{slideSub || description || 'Subtitle goes here'}</div>
+              </div>
             </div>
           </div>
         )}

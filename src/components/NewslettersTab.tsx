@@ -14,6 +14,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 interface NewslettersTabProps {
   profile: Profile | null;
   initialId?: string | undefined;
+  onContentViewed?: (contentId: string) => void;
 }
 
 interface Newsletter {
@@ -203,7 +204,7 @@ function NewsletterDetail({
           </h2>
 
           {!canAccess ? (
-            /* Upgrade prompt — school plan required */
+            /* Upgrade prompt — pro or school plan required */
             <div style={{
               borderRadius: 14, padding: '24px 28px',
               background: `${C.mustard}0c`,
@@ -219,10 +220,10 @@ function NewsletterDetail({
               </div>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ color: C.mustard, fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>
-                  School plan required
+                  Subscription required
                 </div>
                 <div style={{ color: C.gray, fontSize: '0.8rem', lineHeight: 1.5 }}>
-                  Newsletters are available on the School plan. Upgrade to access all newsletters for your institution.
+                  Newsletters are included in both the Individual and Admin plans. Upgrade to access all newsletters.
                 </div>
               </div>
               <a
@@ -299,14 +300,14 @@ function NewsletterDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function NewslettersTab({ profile, initialId }: NewslettersTabProps) {
+export function NewslettersTab({ profile, initialId, onContentViewed }: NewslettersTabProps) {
   const { session } = useAuth();
   const [newsletters, setNewsletters] = useState<Newsletter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Newsletter | null>(null);
 
-  // Newsletters are school-tier only
+  // Newsletters are available on pro and school tiers
   const canAccess = canAccessNewsletters(profile?.subscription_tier);
 
   const fetchNewsletters = useCallback(async () => {
@@ -335,8 +336,14 @@ export function NewslettersTab({ profile, initialId }: NewslettersTabProps) {
   useEffect(() => {
     if (!initialId || newsletters.length === 0) return;
     const found = newsletters.find(n => n.id === initialId);
-    if (found) setSelected(found);
-  }, [newsletters, initialId]);
+    if (found) {
+      setSelected(found);
+      // Mark related notifications as read
+      if (onContentViewed) {
+        onContentViewed(initialId);
+      }
+    }
+  }, [newsletters, initialId, onContentViewed]);
 
   const columns = useMemo<ColumnDef<Newsletter, unknown>[]>(() => [
     {
@@ -423,7 +430,7 @@ export function NewslettersTab({ profile, initialId }: NewslettersTabProps) {
                 cursor: 'pointer',
               }}
             >
-              {!canAccess ? <><Lock size={11} /> School</> : 'Open →'}
+              {!canAccess ? <><Lock size={11} /> Pro</> : 'Open →'}
             </button>
           </div>
         );

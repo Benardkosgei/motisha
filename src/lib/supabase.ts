@@ -30,6 +30,7 @@ export interface User {
   downloads_limit: number
   phone?: string | null
   phone_verified?: boolean
+  job_title?: string | null
   trial_started_at?: string | null
   trial_ends_at?: string | null
   subscription_package?: 'individual' | 'admin' | null
@@ -63,6 +64,7 @@ export interface Content {
   file_url?: string | null
   /** hero slider metadata */
   slide_enabled?: boolean
+  slide_expires_at?: string | null
   slide_title?: string | null
   slide_tag?: string | null
   slide_sub?: string | null

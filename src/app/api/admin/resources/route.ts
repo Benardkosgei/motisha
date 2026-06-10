@@ -87,6 +87,12 @@ export async function POST(req: NextRequest) {
   const premium = isForm ? (body.get('premium') === 'true') : Boolean(body.premium);
   const fileUrl = isForm ? (body.get('file_url') as string | null) : body.file_url;
   const status = isForm ? (body.get('status') as string | null) : body.status;
+  const slideEnabled = isForm ? (body.get('slide_enabled') === 'true') : Boolean(body.slide_enabled);
+  const slideExpiresAtRaw = isForm ? (body.get('slide_expires_at') as string | null) : body.slide_expires_at;
+  const slideTitle = isForm ? (body.get('slide_title') as string | null) : body.slide_title;
+  const slideTag = isForm ? (body.get('slide_tag') as string | null) : body.slide_tag;
+  const slideSub = isForm ? (body.get('slide_sub') as string | null) : body.slide_sub;
+  const slideAccent = isForm ? (body.get('slide_accent') as string | null) : body.slide_accent;
 
   if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
 
@@ -97,6 +103,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const fileUrls = files.length > 0 ? await uploadFiles(files) : (fileUrl ? [fileUrl.trim()] : []);
+
+    const finalStatus = status ?? 'draft';
+    const now = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin
       .from('contents')
@@ -110,7 +119,15 @@ export async function POST(req: NextRequest) {
         week: 'Resources',
         file_url: fileUrls[0] ?? null,
         file_urls: fileUrls,
-        status: status ?? 'draft',
+        status: finalStatus,
+        publish_at: finalStatus === 'published' ? now : null,
+        published_at: finalStatus === 'published' ? now : null,
+        slide_enabled: slideEnabled ?? false,
+        slide_expires_at: slideEnabled ? (slideExpiresAtRaw || null) : null,
+        slide_title: slideTitle?.trim() || null,
+        slide_tag: slideTag?.trim() || null,
+        slide_sub: slideSub?.trim() || null,
+        slide_accent: slideAccent?.trim() || null,
       })
       .select()
       .single();

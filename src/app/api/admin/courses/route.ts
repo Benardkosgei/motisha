@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       title, description, icon, premium, week, slide_enabled, slide_title,
-      slide_tag, slide_sub, slide_accent, modules, publish_at, status,
+      slide_tag, slide_sub, slide_accent, slide_expires_at, modules, publish_at, status,
       thumbnail_url, trailer_url, level, language, duration_hours, category,
       objectives, requirements, target_audience, certificate, access_tier,
     } = body;
@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       premium: premium === true,
       week: week || null,
       slide_enabled: slide_enabled === true,
+      slide_expires_at: slide_enabled === true ? (slide_expires_at || null) : null,
       slide_title: slide_title?.trim() || null,
       slide_tag: slide_tag?.trim() || null,
       slide_sub: slide_sub?.trim() || null,

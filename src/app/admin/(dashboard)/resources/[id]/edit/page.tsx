@@ -16,6 +16,12 @@ interface Resource {
   file_url: string | null;
   file_urls?: string[] | null;
   week: string | null;
+  slide_enabled?: boolean;
+  slide_expires_at?: string | null;
+  slide_title?: string | null;
+  slide_tag?: string | null;
+  slide_sub?: string | null;
+  slide_accent?: string | null;
 }
 
 const RESOURCE_TYPES = ['Resource', 'Guide', 'Template'];
@@ -119,6 +125,23 @@ export default function EditResourcePage() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Slide fields
+  const [slideEnabled, setSlideEnabled] = useState(false);
+  const [slideExpiresAt, setSlideExpiresAt] = useState('');
+  const [slideTitle, setSlideTitle] = useState('');
+  const [slideTag, setSlideTag] = useState('');
+  const [slideSub, setSlideSub] = useState('');
+  const [slideAccent, setSlideAccent] = useState('#A855F7');
+
+  const ACCENT_PRESETS = [
+    { label: 'Purple', value: '#A855F7' },
+    { label: 'Teal',   value: '#0EA5E9' },
+    { label: 'Green',  value: '#10B981' },
+    { label: 'Amber',  value: '#F5A623' },
+    { label: 'Orange', value: '#F97316' },
+    { label: 'Cyan',   value: '#06B6D4' },
+  ];
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 14px', borderRadius: 8,
     background: C.navyLight, border: `1px solid rgba(14,165,233,0.2)`,
@@ -146,6 +169,12 @@ export default function EditResourcePage() {
         setExistingFiles(data.file_urls?.length ? data.file_urls : data.file_url ? [data.file_url] : []);
         setPremium(data.premium);
         setStatus(data.status ?? 'draft');
+        setSlideEnabled(data.slide_enabled ?? false);
+        setSlideExpiresAt(data.slide_expires_at ? new Date(new Date(data.slide_expires_at).getTime() + 3 * 3600000).toISOString().slice(0, 16) : '');
+        setSlideTitle(data.slide_title ?? '');
+        setSlideTag(data.slide_tag ?? '');
+        setSlideSub(data.slide_sub ?? '');
+        setSlideAccent(data.slide_accent ?? '#A855F7');
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
@@ -173,6 +202,12 @@ export default function EditResourcePage() {
       formData.append('file_url', fileUrl.trim() || '');
       formData.append('premium', String(premium));
       formData.append('status', newStatus ?? status);
+      formData.append('slide_enabled', String(slideEnabled));
+      formData.append('slide_expires_at', slideEnabled && slideExpiresAt ? new Date(new Date(slideExpiresAt).getTime() - 3 * 3600000).toISOString() : '');
+      formData.append('slide_title', slideTitle.trim());
+      formData.append('slide_tag', slideTag.trim());
+      formData.append('slide_sub', slideSub.trim());
+      formData.append('slide_accent', slideAccent.trim());
       if (clearExisting || selectedFiles.length > 0) {
         formData.append('clear_files', 'true');
       }
@@ -454,6 +489,139 @@ export default function EditResourcePage() {
               <option value="published">Published</option>
             </select>
           </div>
+        </div>
+
+        {/* ── Hero Carousel ── */}
+        <div style={{ borderTop: `1px solid rgba(14,165,233,0.12)`, paddingTop: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 4 }}>
+            <input
+              type="checkbox"
+              checked={slideEnabled}
+              onChange={e => setSlideEnabled(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: C.teal, cursor: 'pointer' }}
+            />
+            <span style={{ color: C.white, fontWeight: 700, fontSize: '0.88rem' }}>
+              Show in Hero Carousel
+            </span>
+          </label>
+          <p style={{ color: C.gray, fontSize: '0.76rem', margin: '0 0 12px 26px', lineHeight: 1.5 }}>
+            Feature this resource on the home screen slider. Content must be published to appear.
+          </p>
+
+          {slideEnabled && (
+            <div style={{ display: 'grid', gap: 14, paddingLeft: 26 }}>
+              <div>
+                <label style={{ display: 'block', color: C.offWhite, fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Slide Title <span style={{ color: C.gray, textTransform: 'none', fontWeight: 400 }}>(optional — defaults to content title)</span>
+                </label>
+                <input
+                  type="text"
+                  value={slideTitle}
+                  onChange={e => setSlideTitle(e.target.value)}
+                  placeholder={title || 'Leave blank to use content title'}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', color: C.offWhite, fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Badge / Tag <span style={{ color: C.gray, textTransform: 'none', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={slideTag}
+                    onChange={e => setSlideTag(e.target.value)}
+                    placeholder="e.g. THIS WEEK · FREE"
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: C.offWhite, fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Accent Colour
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {ACCENT_PRESETS.map(p => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => setSlideAccent(p.value)}
+                        title={p.label}
+                        style={{
+                          width: 26, height: 26, borderRadius: '50%',
+                          background: p.value, border: `3px solid ${slideAccent === p.value ? C.white : 'transparent'}`,
+                          cursor: 'pointer', transition: 'border 0.15s',
+                        }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={slideAccent}
+                      onChange={e => setSlideAccent(e.target.value)}
+                      title="Custom colour"
+                      style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'none' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: C.offWhite, fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Subtitle <span style={{ color: C.gray, textTransform: 'none', fontWeight: 400 }}>(optional — defaults to description)</span>
+                </label>
+                <input
+                  type="text"
+                  value={slideSub}
+                  onChange={e => setSlideSub(e.target.value)}
+                  placeholder={description || 'Leave blank to use description'}
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Expiry */}
+              <div>
+                <label style={{ display: 'block', color: C.offWhite, fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Auto-remove slide after <span style={{ color: C.gray, textTransform: 'none', fontWeight: 400 }}>(optional — leave blank to never expire)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={slideExpiresAt}
+                  onChange={e => setSlideExpiresAt(e.target.value)}
+                  style={inputStyle}
+                />
+                {!slideExpiresAt && (
+                  <button type="button" onClick={() => { const d = new Date(Date.now() + 10 * 24 * 3600 * 1000); setSlideExpiresAt(new Date(d.getTime() + 3 * 3600000).toISOString().slice(0, 16)); }}
+                    style={{ marginTop: 6, fontSize: '0.75rem', color: C.teal, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                    Set to 10 days from now
+                  </button>
+                )}
+                {slideExpiresAt && (
+                  <button type="button" onClick={() => setSlideExpiresAt('')}
+                    style={{ marginTop: 6, fontSize: '0.75rem', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                    Remove expiry (never expires)
+                  </button>
+                )}
+              </div>
+
+              {/* Live preview */}
+              <div style={{ borderRadius: 12, overflow: 'hidden', position: 'relative', minHeight: 120 }}>
+                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, #0D1B2E, #0D3463, #0A4080)` }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.6) 60%, transparent)' }} />
+                <div style={{ position: 'relative', padding: '20px 22px', zIndex: 1 }}>
+                  <span style={{ background: `${slideAccent}25`, color: slideAccent, border: `1px solid ${slideAccent}40`, fontSize: '0.6rem', fontWeight: 800, padding: '2px 8px', borderRadius: 5, letterSpacing: '0.1em' }}>
+                    {slideTag || 'RESOURCE'}
+                  </span>
+                  <div style={{ fontSize: '1.6rem', margin: '6px 0 4px' }}>{icon || '📚'}</div>
+                  <div style={{ color: '#fff', fontWeight: 800, fontSize: '0.95rem', marginBottom: 4 }}>
+                    {slideTitle || title || 'Slide Title'}
+                  </div>
+                  <div style={{ color: '#94A3B8', fontSize: '0.72rem' }}>
+                    {slideSub || description || 'Subtitle goes here'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

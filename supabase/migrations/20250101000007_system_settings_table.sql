@@ -108,7 +108,7 @@ VALUES
   ),
   (
     'email_sender_address',
-    '{"address": "noreply@motisha.com"}'::jsonb
+    '{"address": "noreply@motisha.co.ke"}'::jsonb
   ),
   (
     'notifications_enabled',

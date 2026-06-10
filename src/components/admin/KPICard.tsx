@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { type LucideIcon } from 'lucide-react';
 import { C } from '@/components/Logo';
 
@@ -10,16 +11,17 @@ interface KPICardProps {
   icon: LucideIcon;
   loading: boolean;
   color?: string;
-  trend?: { value: number; label: string }; // optional % change
+  trend?: { value: number; label: string };
+  /** When provided the card becomes a clickable link to this admin path. */
+  href?: string;
 }
 
 /**
  * KPICard — displays a single key performance indicator with a Lucide icon.
  * Shows a skeleton loading state while data is being fetched.
- *
- * Requirements: 2.1, 2.7, 2.8
+ * Pass `href` to make the entire card a clickable navigation link.
  */
-export function KPICard({ title, value, icon: Icon, loading, color, trend }: KPICardProps) {
+export function KPICard({ title, value, icon: Icon, loading, color, trend, href }: KPICardProps) {
   const accentColor = color ?? C.teal;
 
   if (loading) {
@@ -46,21 +48,8 @@ export function KPICard({ title, value, icon: Icon, loading, color, trend }: KPI
     );
   }
 
-  return (
-    <div
-      style={{
-        background: C.navyMid,
-        border: `1px solid rgba(14,165,233,0.12)`,
-        borderRadius: 14,
-        padding: '18px 20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        minWidth: 0,
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
+  const cardContent = (
+    <>
       {/* Subtle accent glow top-right */}
       <div style={{
         position: 'absolute', top: 0, right: 0,
@@ -106,6 +95,61 @@ export function KPICard({ title, value, icon: Icon, loading, color, trend }: KPI
           <span style={{ color: C.grayDark, fontWeight: 400 }}>{trend.label}</span>
         </div>
       )}
+
+      {/* Arrow hint — only on clickable cards */}
+      {href && (
+        <div style={{
+          position: 'absolute', bottom: 14, right: 16,
+          color: `${accentColor}60`, fontSize: '0.7rem', fontWeight: 800,
+          transition: 'color 0.2s',
+        }}>
+          →
+        </div>
+      )}
+    </>
+  );
+
+  const baseStyle: React.CSSProperties = {
+    background: C.navyMid,
+    border: `1px solid rgba(14,165,233,0.12)`,
+    borderRadius: 14,
+    padding: '18px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    minWidth: 0,
+    position: 'relative',
+    overflow: 'hidden',
+    transition: 'border-color 0.2s, transform 0.15s, box-shadow 0.2s',
+    textDecoration: 'none',
+  };
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        style={{ ...baseStyle, cursor: 'pointer' }}
+        onMouseEnter={e => {
+          const el = e.currentTarget;
+          el.style.borderColor = `${accentColor}50`;
+          el.style.transform = 'translateY(-2px)';
+          el.style.boxShadow = `0 6px 24px ${accentColor}18`;
+        }}
+        onMouseLeave={e => {
+          const el = e.currentTarget;
+          el.style.borderColor = 'rgba(14,165,233,0.12)';
+          el.style.transform = '';
+          el.style.boxShadow = '';
+        }}
+      >
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return (
+    <div style={baseStyle}>
+      {cardContent}
     </div>
   );
 }

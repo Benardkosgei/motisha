@@ -32,7 +32,6 @@ interface SystemSettings {
   referral_rates?: { individual?: number; admin?: number };
   contact_info?: { owner_name?: string; whatsapp?: string; email?: string; support_email?: string; response_hours?: number };
   bank_details?: { bank_name?: string; account_name?: string; account_number?: string; branch?: string };
-  hero_slides?: Array<{ title: string; tag: string; sub: string; icon: string; accent: string; nav: string }>;
   _timestamps?: Record<string, string>;
 }
 
@@ -806,137 +805,67 @@ function ContactBankTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: System
 
 // ── Hero Slides ───────────────────────────────────────────────────────────────
 
-const NAV_OPTIONS = ['home', 'calendar', 'courses', 'referral', 'book-service', 'resources', 'pricing', 'notifications'];
+const NAV_OPTIONS = [
+  'home', 'calendar', 'speeches', 'articles', 'newsletters',
+  'courses', 'referral', 'book-service', 'resources', 'pricing', 'notifications',
+];
 const ACCENT_PRESETS = [
-  { label: 'Teal', value: '#0EA5E9' },
-  { label: 'Green', value: '#10B981' },
-  { label: 'Amber', value: '#F5A623' },
+  { label: 'Teal',   value: '#0EA5E9' },
+  { label: 'Green',  value: '#10B981' },
+  { label: 'Amber',  value: '#F5A623' },
   { label: 'Purple', value: '#A855F7' },
-  { label: 'Cyan', value: '#06B6D4' },
-  { label: 'Rose', value: '#F43F5E' },
+  { label: 'Cyan',   value: '#06B6D4' },
+  { label: 'Rose',   value: '#F43F5E' },
 ];
 
-type HeroSlide = NonNullable<SystemSettings['hero_slides']>[number];
-
-function HeroSlidesTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
-  const defaultSlides: HeroSlide[] = s.hero_slides ?? [
-    { title: 'Opening Term Assembly Speech', tag: 'WEEK 1 · NEW', sub: 'Powerful opening address welcoming students back — ready to deliver', icon: '🎤', accent: '#0EA5E9', nav: 'calendar' },
-    { title: 'Financial Freedom for Teachers', tag: 'PREMIUM COURSE', sub: '10 modules · 4.5 hrs · TSC CPD hours included', icon: '💰', accent: '#10B981', nav: 'courses' },
-    { title: 'Student Council Leadership Pack', tag: 'THIS WEEK', sub: 'Full training guide + meeting scripts + templates', icon: '🌟', accent: '#F5A623', nav: 'calendar' },
-  ];
-
-  const [slides, setSlides] = useState<HeroSlide[]>(defaultSlides);
-  const [busy, setBusy]     = useState(false);
-  const [ok, setOk]         = useState('');
-  const [err, setErr]       = useState('');
-
-  function updateSlide(i: number, patch: Partial<HeroSlide>) {
-    setSlides(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
-  }
-
-  function addSlide() {
-    setSlides(prev => [...prev, { title: '', tag: 'NEW', sub: '', icon: '📚', accent: '#0EA5E9', nav: 'calendar' }]);
-  }
-
-  function removeSlide(i: number) {
-    setSlides(prev => prev.filter((_, idx) => idx !== i));
-  }
-
-  async function save() {
-    const invalid = slides.find(s => !s.title.trim());
-    if (invalid) { setErr('All slides must have a title'); return; }
-    setBusy(true); setErr(''); setOk('');
-    try {
-      const fd = new FormData();
-      fd.append('hero_slides', JSON.stringify(slides));
-      const r = await fetch('/api/admin/settings', { method: 'PATCH', body: fd });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Failed'); }
-      onSaved(await r.json());
-      setOk('Hero slides saved.'); setTimeout(() => setOk(''), 4000);
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(false); }
-  }
-
+function HeroSlidesTab(_props: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
   return (
     <div>
-      {ok && <OK msg={ok} />}{err && <ERR msg={err} />}
-      <div style={{ ...crd, marginBottom: 20 }}>
+      <div style={crd}>
         <SecTitle icon={Megaphone} label="Home Page Hero Carousel" />
-        <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 20, lineHeight: 1.5 }}>
-          These slides rotate on the teacher home page. Each slide links to a tab when &ldquo;Open Now&rdquo; is clicked.
+        <p style={{ color: C.gray, fontSize: '0.85rem', lineHeight: 1.7, marginBottom: 20 }}>
+          The hero carousel is driven automatically by your published content.
+          There are no manually-configured slides — instead, enable a slide directly on any
+          Speech, Course, Newsletter, Article, Resource, Guide, or Template when creating
+          or editing it.
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {slides.map((slide, i) => (
-            <div key={i} style={{ borderRadius: 10, border: `1px solid rgba(14,165,233,0.15)`, background: C.navyLight, overflow: 'hidden' }}>
-              {/* Accent bar */}
-              <div style={{ height: 3, background: slide.accent }} />
-              <div style={{ padding: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <span style={{ color: C.white, fontWeight: 700, fontSize: '0.85rem' }}>Slide {i + 1}</span>
-                  {slides.length > 1 && (
-                    <button type="button" onClick={() => removeSlide(i)}
-                      style={{ background: 'none', border: 'none', color: C.danger, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Trash2 size={12} /> Remove
-                    </button>
-                  )}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={lbl}>Title *</label>
-                    <input type="text" value={slide.title} onChange={e => updateSlide(i, { title: e.target.value })}
-                      placeholder="e.g. Opening Term Assembly Speech" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Tag / Badge</label>
-                    <input type="text" value={slide.tag} onChange={e => updateSlide(i, { tag: e.target.value })}
-                      placeholder="e.g. WEEK 1 · NEW" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Icon (emoji)</label>
-                    <input type="text" value={slide.icon} onChange={e => updateSlide(i, { icon: e.target.value })}
-                      placeholder="🎤" style={{ ...inp, width: 80 }} maxLength={4} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={lbl}>Subtitle</label>
-                    <input type="text" value={slide.sub} onChange={e => updateSlide(i, { sub: e.target.value })}
-                      placeholder="Short description shown under the title" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Accent Colour</label>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                      {ACCENT_PRESETS.map(p => (
-                        <button key={p.value} type="button" onClick={() => updateSlide(i, { accent: p.value })}
-                          title={p.label}
-                          style={{ width: 24, height: 24, borderRadius: '50%', background: p.value, border: slide.accent === p.value ? `3px solid ${C.white}` : '2px solid transparent', cursor: 'pointer' }} />
-                      ))}
-                    </div>
-                    <input type="text" value={slide.accent} onChange={e => updateSlide(i, { accent: e.target.value })}
-                      placeholder="#0EA5E9" style={{ ...inp, width: 120 }} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Navigate to (tab)</label>
-                    <div style={{ position: 'relative' }}>
-                      <select value={slide.nav} onChange={e => updateSlide(i, { nav: e.target.value })}
-                        style={{ ...inp, paddingRight: 32, appearance: 'none', cursor: 'pointer' }}>
-                        {NAV_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: C.gray, pointerEvents: 'none', fontSize: '0.7rem' }}>▾</span>
-                    </div>
-                  </div>
+        <div style={{ display: 'grid', gap: 14 }}>
+          {[
+            { icon: '🎤', type: 'Speech',     color: '#0EA5E9', path: '/admin/speeches' },
+            { icon: '🎓', type: 'Course',     color: '#10B981', path: '/admin/courses' },
+            { icon: '📮', type: 'Newsletter', color: '#F5A623', path: '/admin/newsletters' },
+            { icon: '📰', type: 'Article',    color: '#8B5CF6', path: '/admin/articles' },
+            { icon: '📚', type: 'Resource / Guide / Template', color: '#A855F7', path: '/admin/resources' },
+          ].map(item => (
+            <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderRadius: 10, background: `${item.color}08`, border: `1px solid ${item.color}20` }}>
+              <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>{item.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: C.white, fontWeight: 700, fontSize: '0.85rem' }}>{item.type}</div>
+                <div style={{ color: C.gray, fontSize: '0.76rem', marginTop: 2 }}>
+                  Open any {item.type.split(' /')[0].toLowerCase()} and toggle <strong style={{ color: C.offWhite }}>Show in Hero Carousel</strong> to add it as a slide.
+                  Optionally set a custom slide title, badge, subtitle, and accent colour.
                 </div>
               </div>
+              <a
+                href={item.path}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 8, fontSize: '0.76rem', fontWeight: 700, textDecoration: 'none', background: `${item.color}15`, color: item.color, border: `1px solid ${item.color}30`, flexShrink: 0 }}
+              >
+                Manage →
+              </a>
             </div>
           ))}
         </div>
 
-        {slides.length < 5 && (
-          <button type="button" onClick={addSlide}
-            style={{ width: '100%', marginTop: 12, padding: '11px', borderRadius: 10, border: `1px dashed ${C.teal}40`, background: `${C.teal}08`, color: C.teal, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: "'DM Sans',sans-serif" }}>
-            <Plus size={14} /> Add Slide
-          </button>
-        )}
+        <div style={{ marginTop: 20, padding: '14px 16px', borderRadius: 10, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)' }}>
+          <div style={{ color: C.teal, fontWeight: 700, fontSize: '0.8rem', marginBottom: 6 }}>ℹ How slides are ordered</div>
+          <div style={{ color: C.gray, fontSize: '0.78rem', lineHeight: 1.6 }}>
+            Slides appear in reverse-chronological order of <strong style={{ color: C.offWhite }}>publish date</strong> — the most recently published enabled content appears first.
+            Up to <strong style={{ color: C.offWhite }}>6 slides</strong> are shown at a time.
+            If no content has the carousel toggle enabled, default placeholder slides are shown.
+          </div>
+        </div>
       </div>
-      <Btn busy={busy} onClick={save} />
     </div>
   );
 }

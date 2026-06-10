@@ -15,7 +15,7 @@ export function TopPagesChart({ data }: TopPagesChartProps) {
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
           <XAxis type="number" tick={CHART_THEME.axis.tick} axisLine={CHART_THEME.axis.axisLine} tickLine={CHART_THEME.axis.tickLine} />
           <YAxis type="category" dataKey="path" tick={CHART_THEME.axis.tick} axisLine={CHART_THEME.axis.axisLine} tickLine={CHART_THEME.axis.tickLine} width={180} />
-          <Tooltip contentStyle={tooltipContentStyle} labelStyle={CHART_THEME.tooltipLabelStyle} itemStyle={CHART_THEME.tooltipItemStyle} />
+          <Tooltip contentStyle={tooltipContentStyle} />
           <Bar dataKey="views" fill={CHART_THEME.colors[1]} radius={[4, 0, 0, 4]} />
         </BarChart>
       </ResponsiveContainer>

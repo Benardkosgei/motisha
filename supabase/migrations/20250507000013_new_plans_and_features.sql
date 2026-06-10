@@ -57,9 +57,9 @@ INSERT INTO public.plans (package, billing, price_kes, max_accounts, features) V
   ('individual', 'monthly',  1500, 1, '["All speeches & newsletters","Full course library","Unlimited downloads","Weekly new content","PDF + Word formats"]'::jsonb),
   ('individual', 'termly',   5000, 1, '["All speeches & newsletters","Full course library","Unlimited downloads","Weekly new content","PDF + Word formats","Save KES 500 vs monthly"]'::jsonb),
   ('individual', 'yearly',  12000, 1, '["All speeches & newsletters","Full course library","Unlimited downloads","Weekly new content","PDF + Word formats","Save KES 6,000 vs monthly"]'::jsonb),
-  ('admin',      'monthly',  6500, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All individual features","School-wide access","Usage analytics"]'::jsonb),
-  ('admin',      'termly',  22500, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All individual features","School-wide access","Usage analytics","Save KES 2,000 vs monthly"]'::jsonb),
-  ('admin',      'yearly',  60000, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All individual features","School-wide access","Usage analytics","Save KES 18,000 vs monthly"]'::jsonb)
+  ('admin',      'monthly',  6500, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All content access for each account (same as Individual)","School-wide access","Usage analytics"]'::jsonb),
+  ('admin',      'termly',  22500, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All content access for each account (same as Individual)","School-wide access","Usage analytics","Save KES 2,000 vs monthly"]'::jsonb),
+  ('admin',      'yearly',  60000, 5, '["Up to 5 staff accounts","Principal + Deputy + Senior Teacher + DoS + HoD G&C","All content access for each account (same as Individual)","School-wide access","Usage analytics","Save KES 18,000 vs monthly"]'::jsonb)
 ON CONFLICT (package, billing) DO NOTHING;
 
 -- ============================================================
@@ -356,20 +356,24 @@ BEGIN
   END IF;
 
   v_icon := CASE NEW.type
-    WHEN 'Speech'     THEN '🎤'
-    WHEN 'Newsletter' THEN '📮'
-    WHEN 'Course'     THEN '🎓'
-    WHEN 'Template'   THEN '📋'
-    WHEN 'Resource'   THEN '📚'
+    WHEN 'Speech'      THEN '🎤'
+    WHEN 'Newsletter'  THEN '📮'
+    WHEN 'Course'      THEN '🎓'
+    WHEN 'Template'    THEN '📋'
+    WHEN 'Resource'    THEN '📚'
+    WHEN 'Article'     THEN '📰'
+    WHEN 'Guide'       THEN '🗺️'
     ELSE '📄'
   END;
 
   v_color := CASE NEW.type
-    WHEN 'Speech'     THEN '#0EA5E9'
-    WHEN 'Newsletter' THEN '#F5A623'
-    WHEN 'Course'     THEN '#06B6D4'
-    WHEN 'Template'   THEN '#10B981'
-    WHEN 'Resource'   THEN '#A855F7'
+    WHEN 'Speech'      THEN '#0EA5E9'
+    WHEN 'Newsletter'  THEN '#F5A623'
+    WHEN 'Course'      THEN '#06B6D4'
+    WHEN 'Template'    THEN '#10B981'
+    WHEN 'Resource'    THEN '#A855F7'
+    WHEN 'Article'     THEN '#22C55E'
+    WHEN 'Guide'       THEN '#F97316'
     ELSE '#0EA5E9'
   END;
 

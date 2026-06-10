@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendMail } from '@/lib/mailer';
+import { subscriptionConfirmedEmail, bookingConfirmationEmail } from '@/lib/email-templates';
 
 // Billing period → days
 const BILLING_DAYS: Record<string, number> = {
@@ -60,6 +62,40 @@ export async function POST(req: NextRequest) {
         .from('system_settings')
         .delete()
         .eq('key', `mpesa_booking_${CheckoutRequestID}`);
+
+      // Send booking confirmation email (fire-and-forget)
+      void Promise.resolve(
+        Promise.all([
+          supabaseAdmin
+            .from('bookings')
+            .select('service, preferred_date, location, notes, email, contact_person, users:user_id(name, email)')
+            .eq('id', pending.bookingId)
+            .single(),
+          supabaseAdmin
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'contact_info')
+            .single(),
+        ]).then(async ([bookingResult, contactResult]) => {
+          const booking = bookingResult.data;
+          const contactInfo = contactResult.data?.value as { name?: string; whatsapp?: string } | undefined;
+          if (!booking?.email) return;
+          const userName = (booking.users as any)?.name ?? 'there';
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://motisha.co.ke';
+          const { subject, html } = bookingConfirmationEmail({
+            name: booking.contact_person || userName,
+            email: booking.email,
+            serviceType: booking.service,
+            eventDate: booking.preferred_date,
+            eventVenue: booking.location,
+            message: booking.notes,
+            ownerName: contactInfo?.name ?? 'Motisha Support',
+            ownerWhatsapp: contactInfo?.whatsapp ?? '+254700000000',
+            appUrl,
+          });
+          await sendMail({ to: booking.email, subject, html });
+        })
+      ).catch((e: unknown) => console.warn('[mpesa callback] booking email failed:', e));
 
       return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     }
@@ -144,6 +180,29 @@ export async function POST(req: NextRequest) {
       .from('system_settings')
       .delete()
       .eq('key', `mpesa_pending_${CheckoutRequestID}`);
+
+    // Send subscription confirmation email (fire-and-forget)
+    void Promise.resolve(
+      supabaseAdmin
+        .from('profiles')
+        .select('name, email')
+        .eq('id', userId)
+        .single()
+        .then(async ({ data: profile }) => {
+          if (!profile?.email) return;
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://motisha.co.ke';
+          const { subject, html } = subscriptionConfirmedEmail({
+            name: profile.name,
+            package: pending.package,
+            billing: pending.billing,
+            amountKes: amountPaid,
+            expiresAt,
+            receiptNo: mpesaReceipt,
+            appUrl,
+          });
+          await sendMail({ to: profile.email, subject, html });
+        })
+    ).catch((e: unknown) => console.warn('[mpesa callback] confirmation email failed:', e));
 
     return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   } catch (err) {

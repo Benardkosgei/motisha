@@ -14,6 +14,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 interface SpeechesTabProps {
   profile: Profile | null;
   initialId?: string | undefined;
+  onContentViewed?: (contentId: string) => void;
 }
 
 interface Speech {
@@ -274,7 +275,7 @@ function SpeechDetail({
 
 // ─── List view ────────────────────────────────────────────────────────────────
 
-export function SpeechesTab({ profile, initialId }: SpeechesTabProps) {
+export function SpeechesTab({ profile, initialId, onContentViewed }: SpeechesTabProps) {
   const { session } = useAuth();
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [loading, setLoading] = useState(true);
@@ -310,8 +311,14 @@ export function SpeechesTab({ profile, initialId }: SpeechesTabProps) {
   useEffect(() => {
     if (!initialId || speeches.length === 0) return;
     const found = speeches.find(s => s.id === initialId);
-    if (found) setSelected(found);
-  }, [speeches, initialId]);
+    if (found) {
+      setSelected(found);
+      // Mark related notifications as read
+      if (onContentViewed) {
+        onContentViewed(initialId);
+      }
+    }
+  }, [speeches, initialId, onContentViewed]);
 
   const columns = useMemo<ColumnDef<Speech, unknown>[]>(() => [
     {

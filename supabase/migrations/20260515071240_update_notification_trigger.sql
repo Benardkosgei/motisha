@@ -25,20 +25,24 @@ BEGIN
   END IF;
 
   v_icon := CASE NEW.type
-    WHEN 'Speech'     THEN '🎤'
-    WHEN 'Newsletter' THEN '📮'
-    WHEN 'Course'     THEN '🎓'
-    WHEN 'Template'   THEN '📋'
-    WHEN 'Resource'   THEN '📚'
+    WHEN 'Speech'      THEN '🎤'
+    WHEN 'Newsletter'  THEN '📮'
+    WHEN 'Course'      THEN '🎓'
+    WHEN 'Template'    THEN '📋'
+    WHEN 'Resource'    THEN '📚'
+    WHEN 'Article'     THEN '📰'
+    WHEN 'Guide'       THEN '🗺️'
     ELSE '📄'
   END;
 
   v_color := CASE NEW.type
-    WHEN 'Speech'     THEN '#0EA5E9'
-    WHEN 'Newsletter' THEN '#F5A623'
-    WHEN 'Course'     THEN '#06B6D4'
-    WHEN 'Template'   THEN '#10B981'
-    WHEN 'Resource'   THEN '#A855F7'
+    WHEN 'Speech'      THEN '#0EA5E9'
+    WHEN 'Newsletter'  THEN '#F5A623'
+    WHEN 'Course'      THEN '#06B6D4'
+    WHEN 'Template'    THEN '#10B981'
+    WHEN 'Resource'    THEN '#A855F7'
+    WHEN 'Article'     THEN '#22C55E'
+    WHEN 'Guide'       THEN '#F97316'
     ELSE '#0EA5E9'
   END;
 

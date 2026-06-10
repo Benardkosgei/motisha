@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { logAdminAction } from '@/lib/audit-log';
 import { requireAdminSession, canManageUsers } from '@/lib/admin-rbac';
+import { sendMail } from '@/lib/mailer';
+import { subscriptionConfirmedEmail } from '@/lib/email-templates';
 
 /**
  * GET /api/admin/users/[id]
@@ -119,6 +121,22 @@ export async function PATCH(
       targetTable: 'profiles',
       details: { changes: updateData, user_email: data.email },
     });
+
+    // If admin manually upgraded the tier, send a subscription confirmation email
+    if (body.subscription_tier === 'pro' || body.subscription_tier === 'school') {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://motisha.co.ke';
+      const pkg = body.subscription_tier === 'school' ? 'admin' : 'individual';
+      const { subject, html } = subscriptionConfirmedEmail({
+        name: data.name,
+        package: pkg,
+        billing: data.subscription_billing ?? 'monthly',
+        amountKes: 0, // manually activated — amount unknown
+        expiresAt: data.subscription_expires_at ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        appUrl,
+      });
+      sendMail({ to: data.email, subject, html })
+        .catch(e => console.warn('[admin/users] subscription email failed:', e));
+    }
 
     return NextResponse.json(data);
   } catch (error) {

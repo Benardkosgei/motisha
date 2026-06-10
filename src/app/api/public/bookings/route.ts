@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendMail } from '@/lib/mailer';
+import { bookingConfirmationEmail, bookingAdminNotificationEmail } from '@/lib/email-templates';
 
 /**
  * POST /api/public/bookings
  * Creates a new booking from the teacher-facing Book a Service tab.
  * Auth is optional — logged-in users have user_id set, guests do not.
+ * Sends two emails on success (fire-and-forget):
+ *   1. Confirmation to the teacher/requester
+ *   2. Admin notification to the owner
  */
 export async function POST(req: NextRequest) {
   try {
@@ -75,6 +80,51 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // ── Send emails (fire-and-forget — don't block the response) ─────────────
+    if (contact_email?.trim()) {
+      Promise.all([
+        // 1. Fetch system settings for owner contact info and app URL
+        supabaseAdmin
+          .from('system_settings')
+          .select('key, value')
+          .in('key', ['contact_info', 'system_name'])
+          .then(async ({ data: settings }) => {
+            const sysMap = Object.fromEntries((settings ?? []).map(r => [r.key, r.value]));
+            const systemName = (sysMap.system_name as { name?: string } | undefined)?.name ?? 'Motisha';
+            const contactInfo = (sysMap.contact_info as {
+              owner_name?: string;
+              whatsapp?: string;
+              support_email?: string;
+            } | undefined) ?? {};
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://motisha.co.ke';
+            const ownerName = contactInfo.owner_name ?? 'Tom Charles';
+            const ownerWhatsapp = contactInfo.whatsapp ?? '+254768205511';
+            const supportEmail = contactInfo.support_email ?? 'support@motisha.co.ke';
+
+            const emailData = {
+              name: contact_name.trim(),
+              email: contact_email.trim(),
+              serviceType: service_name.trim(),
+              eventDate: event_date ?? undefined,
+              eventVenue: school?.trim() ?? undefined,
+              message: description?.trim() ?? undefined,
+              ownerName,
+              ownerWhatsapp,
+              appUrl,
+              systemName,
+            };
+
+            // Confirmation to the requester
+            const conf = bookingConfirmationEmail(emailData);
+            await sendMail({ to: contact_email.trim(), subject: conf.subject, html: conf.html });
+
+            // Notification to admin/owner
+            const adminNotif = bookingAdminNotificationEmail(emailData);
+            await sendMail({ to: supportEmail, subject: adminNotif.subject, html: adminNotif.html });
+          }),
+      ]).catch(e => console.warn('[public/bookings] email send failed:', e));
+    }
 
     return NextResponse.json(data, { status: 201 });
   } catch (err) {

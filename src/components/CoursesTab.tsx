@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { C } from './Logo';
 import { useAuth } from '@/lib/auth-context';
 import { isPaidSubscriptionTier, canAccessCourses } from '@/lib/profile-access';
 import { useCourses, type LiveCourse } from '@/lib/use-courses';
 
-export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
+export function CoursesTab({ initialId, onContentViewed }: { initialId?: string | undefined; onContentViewed?: (contentId: string) => void }) {
   const { session, profile, isOnTrial, trialDaysLeft } = useAuth();
   const userId = session?.user?.id;
 
@@ -15,11 +15,17 @@ export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
   useEffect(() => {
     if (!initialId || courses.length === 0) return;
     const found = courses.find(c => c.id === initialId);
-    if (found) setSelected(found as LiveCourse);
-  }, [courses, initialId]);
+    // Only auto-open if the course is accessible — don't bypass the lock
+    if (found && canAccessCourse(found as LiveCourse)) {
+      setSelected(found as LiveCourse);
+      // Mark related notifications as read
+      if (onContentViewed) {
+        onContentViewed(initialId);
+      }
+    }
+  }, [courses, initialId, onContentViewed]);
 
   const [selected, setSelected] = useState<LiveCourse | null>(null);
-  const [reminderSet, setReminderSet] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<string | null>(null);
 
   const onTrial = isOnTrial();
@@ -74,7 +80,7 @@ export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
           My Course Dashboard
         </h2>
         <p style={{ color: C.gray, fontSize: '0.85rem' }}>
-          Track progress, set reminders and pick up where you left off.
+          Track progress and pick up where you left off.
         </p>
       </div>
 
@@ -308,22 +314,14 @@ export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (!locked) handleContinue(c); }}
-                    disabled={saving === c.id || locked}
-                    style={{ flex: 1, padding: '8px', borderRadius: 8, fontWeight: 700, fontSize: '0.75rem', background: locked ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${c.color}, ${c.color}bb)`, color: locked ? C.gray : '#fff', border: locked ? '1px solid rgba(255,255,255,0.1)' : 'none', cursor: saving === c.id || locked ? 'default' : 'pointer', opacity: saving === c.id ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif" }}
-                  >
-                    {locked ? '🔒 Locked' : saving === c.id ? '…' : c.progress === 0 ? '▶ Start' : '▶ Continue'}
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setReminderSet((r) => ({ ...r, [c.id]: true })); }}
-                    aria-label={reminderSet[c.id] ? 'Reminder set' : 'Set reminder'}
-                    style={{ padding: '8px 12px', borderRadius: 8, fontWeight: 700, fontSize: '0.75rem', background: reminderSet[c.id] ? `${C.success}20` : 'rgba(255,255,255,0.06)', color: reminderSet[c.id] ? C.success : C.gray, border: `1px solid ${reminderSet[c.id] ? `${C.success}40` : 'rgba(255,255,255,0.1)'}`, cursor: 'pointer', transition: 'all 0.2s' }}
-                  >
-                    {reminderSet[c.id] ? '✓ Set' : '🔔'}
-                  </button>
-                </div>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); if (!locked) handleContinue(c); }}
+                  disabled={saving === c.id || locked}
+                  style={{ width: '100%', padding: '8px', borderRadius: 8, fontWeight: 700, fontSize: '0.75rem', background: locked ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${c.color}, ${c.color}bb)`, color: locked ? C.gray : '#fff', border: locked ? '1px solid rgba(255,255,255,0.1)' : 'none', cursor: saving === c.id || locked ? 'default' : 'pointer', opacity: saving === c.id ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  {locked ? '🔒 Locked' : saving === c.id ? '…' : c.progress === 0 ? '▶ Start' : '▶ Continue'}
+                </button>
               </div>
             </div>
             );
@@ -534,40 +532,33 @@ export function CoursesTab({ initialId }: { initialId?: string | undefined }) {
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => {
-                    handleContinue(selected);
-                    setSelected(null);
+                    if (canAccessCourse(selected)) {
+                      handleContinue(selected);
+                      setSelected(null);
+                    }
                   }}
+                  disabled={!canAccessCourse(selected)}
                   style={{
                     flex: 2,
                     padding: 13,
                     borderRadius: 10,
                     fontWeight: 800,
                     fontSize: '0.88rem',
-                    background: `linear-gradient(135deg, ${selected.color}, ${selected.color}bb)`,
-                    color: '#fff',
-                    border: 'none',
-                    cursor: 'pointer',
+                    background: canAccessCourse(selected)
+                      ? `linear-gradient(135deg, ${selected.color}, ${selected.color}bb)`
+                      : 'rgba(255,255,255,0.06)',
+                    color: canAccessCourse(selected) ? '#fff' : C.gray,
+                    border: canAccessCourse(selected) ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                    cursor: canAccessCourse(selected) ? 'pointer' : 'not-allowed',
                     fontFamily: "'DM Sans', sans-serif",
+                    width: '100%',
                   }}
                 >
-                  {selected.progress === 0 ? '▶ Start Course' : '▶ Continue Learning'}
-                </button>
-                <button
-                  onClick={() => setReminderSet((r) => ({ ...r, [selected.id]: true }))}
-                  style={{
-                    flex: 1,
-                    padding: 13,
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: '0.82rem',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: C.gray,
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    cursor: 'pointer',
-                    fontFamily: "'DM Sans', sans-serif",
-                  }}
-                >
-                  🔔 Remind Me
+                  {!canAccessCourse(selected)
+                    ? '🔒 Upgrade to Access'
+                    : selected.progress === 0
+                    ? '▶ Start Course'
+                    : '▶ Continue Learning'}
                 </button>
               </div>
             </div>

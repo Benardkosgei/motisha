@@ -79,8 +79,13 @@ export async function GET(request: NextRequest) {
     if (roleError) throw roleError;
     if (completionsError) throw completionsError;
 
-    // KPI 4: Current Month Revenue — placeholder until payments table exists
-    const currentMonthRevenue = 0;
+    // KPI 4: Current Month Revenue — from completed subscriptions
+    const { data: revenueRows } = await supabaseAdmin
+      .from('subscriptions')
+      .select('amount_kes')
+      .eq('status', 'completed')
+      .gte('created_at', currentMonthStart.toISOString());
+    const currentMonthRevenue = (revenueRows ?? []).reduce((s, r) => s + (r.amount_kes ?? 0), 0);
 
     // Group registrations by date
     const regMap = new Map<string, number>();
@@ -106,12 +111,29 @@ export async function GET(request: NextRequest) {
     });
     const userPlanDistribution = Array.from(tierMap.entries()).map(([tier, count]) => ({ tier, count }));
 
-    // Revenue trend — placeholder until payments table exists
-    const revenueTrend = Array.from({ length: 12 }, (_, i) => {
-      const date = new Date();
-      date.setMonth(date.getMonth() - (11 - i));
-      return { month: date.toISOString().slice(0, 7), revenue: 0 };
-    });
+    // Revenue trend — last 12 months from subscriptions table
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1);
+    twelveMonthsAgo.setHours(0, 0, 0, 0);
+    const { data: trendRows } = await supabaseAdmin
+      .from('subscriptions')
+      .select('amount_kes, created_at')
+      .eq('status', 'completed')
+      .gte('created_at', twelveMonthsAgo.toISOString());
+
+    // Build a zero-filled 12-month map then sum actual payments into it
+    const trendMap = new Map<string, number>();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      trendMap.set(d.toISOString().slice(0, 7), 0);
+    }
+    for (const row of trendRows ?? []) {
+      const key = new Date(row.created_at).toISOString().slice(0, 7);
+      if (trendMap.has(key)) trendMap.set(key, (trendMap.get(key) ?? 0) + (row.amount_kes ?? 0));
+    }
+    const revenueTrend = Array.from(trendMap.entries()).map(([month, revenue]) => ({ month, revenue }));
 
     return NextResponse.json({
       totalUsers: totalUsers ?? 0,

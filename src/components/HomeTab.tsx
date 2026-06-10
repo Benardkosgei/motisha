@@ -62,7 +62,7 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
           <p style={{ color: '#CBD5E1', fontSize: '0.82rem', marginBottom: 20, maxWidth: 380 }}>{h.sub}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => onNav({ tab: h.nav as NavItem, id: (h as any).id })}
+              onClick={() => onNav(h.id ? { tab: h.nav as NavItem, id: h.id } : h.nav as NavItem)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 10, fontWeight: 800, fontSize: '0.82rem', background: h.accent, color: h.accent === C.mustard || h.accent === '#F5A623' ? C.navy : '#fff', border: 'none', cursor: 'pointer' }}
             >
               <Play size={13} fill="currentColor" /> Open Now
@@ -98,7 +98,7 @@ export function HomeTab({ onNav, profile }: HomeTabProps) {
           { label: 'This Week', icon: CalendarDays, color: C.teal, nav: 'calendar' as NavItem },
           { label: 'My Courses', icon: GraduationCap, color: C.mustard, nav: 'courses' as NavItem },
           { label: 'Refer & Earn', icon: Gift, color: C.success, nav: 'referral' as NavItem },
-          { label: 'Book Service', icon: Briefcase, color: C.turquoise, nav: 'book-service' as NavItem },
+          { label: 'Book a Service', icon: Briefcase, color: C.turquoise, nav: 'book-service' as NavItem },
         ].map(q => {
           const Icon = q.icon;
           return (

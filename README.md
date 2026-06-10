@@ -95,6 +95,11 @@ supabase db push
 supabase db push --include-all
 ```
 
+```
+cp -r public .next/standalone/public
+cp -r .next/static .next/standalone/.next/static
+```
+
 ### 4. Create your first admin user
 
 1. Sign up normally through the teacher app at `/`
@@ -152,16 +157,23 @@ They share the same Supabase database but use different auth systems. The admin 
 
 ---
 
+## Diagnostic Tools
+
+If hero sliders are not showing on the HomeTab:
+
+**Debug Dashboard**: Navigate to `/admin/debug-slides` to see:
+- Which content has `slide_enabled = true`
+- Which slides are visible vs hidden
+- Specific issues preventing slides from showing
+- Step-by-step fix instructions
+
+**Debug API**: Access raw diagnostic data at `GET /api/admin/debug-slides`
+
+See `SLIDER_DEBUG_GUIDE.md` for detailed troubleshooting steps.
+
+---
+
 ## Admin Dashboard
-'''
-cd ~/motisha
-
-# Copy static files
-cp -r .next/static .next/standalone/.next/static
-
-# Copy public files (if you have any)
-cp -r public .next/standalone/public
-'''
 
 Access at `/admin/login`. Two roles:
 

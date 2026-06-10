@@ -31,9 +31,10 @@ export async function GET(request: NextRequest) {
       .select(`
         id, package, billing, amount_kes, payment_method,
         mpesa_receipt, status, created_at,
-        profiles!inner(name, email)
+        profiles!subscriptions_user_id_fkey(name, email)
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(5000); // cap export at 5k rows to avoid timeouts
 
     if (planFilter && planFilter !== 'all') {
       query = query.eq('package', planFilter);

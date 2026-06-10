@@ -1,6 +1,10 @@
 /**
  * usePublicSettings — fetches non-sensitive system settings for the teacher app.
- * Returns contact info, bank details, and hero slides from system_settings.
+ * Returns contact info, bank details, referral rates, and hero slides.
+ *
+ * Hero slides are driven exclusively by published content items that have
+ * slide_enabled = true — they are NOT stored in system_settings.
+ * Default placeholder slides are shown until content slides are published.
  */
 
 import { useEffect, useState } from 'react';
@@ -21,12 +25,13 @@ export interface BankDetails {
 }
 
 export interface HeroSlide {
+  id?: string;      // content row id — used for deep-link navigation via "Open Now"
   title: string;
   tag: string;
   sub: string;
   icon: string;
   accent: string;
-  nav: string;
+  nav: string;       // tab name: speeches | courses | newsletters | articles | resources | calendar
 }
 
 export interface ReferralRates {
@@ -64,12 +69,12 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     sub: 'Powerful opening address welcoming students back — ready to deliver',
     icon: '🎤',
     accent: '#0EA5E9',
-    nav: 'calendar',
+    nav: 'speeches',
   },
   {
     title: 'Financial Freedom for Teachers',
     tag: 'PREMIUM COURSE',
-    sub: '10 modules · 4.5 hrs · TSC CPD hours included',
+    sub: '10 modules · TSC CPD hours included',
     icon: '💰',
     accent: '#10B981',
     nav: 'courses',
@@ -80,7 +85,7 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     sub: 'Full training guide + meeting scripts + templates',
     icon: '🌟',
     accent: '#F5A623',
-    nav: 'calendar',
+    nav: 'resources',
   },
 ];
 
@@ -100,6 +105,15 @@ let fetchPromise: Promise<PublicSettings> | null = null;
 export function invalidatePublicSettingsCache() {
   cachedSettings = null;
   fetchPromise = null;
+}
+
+/**
+ * Bust the cache and immediately re-fetch. Returns updated settings.
+ * Call this in admin forms after publishing slide-enabled content.
+ */
+export async function refreshPublicSettings(): Promise<PublicSettings> {
+  invalidatePublicSettingsCache();
+  return loadSettings();
 }
 
 async function loadSettings(): Promise<PublicSettings> {
@@ -150,6 +164,19 @@ export function usePublicSettings(): PublicSettings & { loading: boolean } {
       setSettings(s);
       setLoading(false);
     });
+  }, []);
+
+  // Re-fetch when the page regains visibility so slides update
+  // after the admin publishes new content in another tab.
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        invalidatePublicSettingsCache();
+        loadSettings().then(setSettings);
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   return { ...settings, loading };

@@ -78,13 +78,7 @@ export async function POST(
 
     if (error) throw error;
 
-    // Keep modules count on contents in sync (non-fatal)
-    try {
-      await supabaseAdmin.rpc('update_course_module_count', { p_course_id: params.id });
-    } catch {
-      // ignore — count is re-synced via direct query below
-    }
-
+    // Keep modules count on contents in sync
     const { count } = await supabaseAdmin
       .from('course_modules')
       .select('*', { count: 'exact', head: true })

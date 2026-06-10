@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const reqBody = await request.json();
-    const { title, body, icon, premium, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, publish_at, published_at, status } = reqBody;
+    const { title, body, icon, premium, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, slide_expires_at, publish_at, published_at, status } = reqBody;
 
     // Validate required fields
     if (!title || typeof title !== 'string' || title.trim() === '') {
@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
       premium: premium === true,
       week: week || null,
       slide_enabled: slide_enabled === true,
+      slide_expires_at: slide_enabled === true ? (slide_expires_at || null) : null,
       slide_title: slide_title?.trim() || null,
       slide_tag: slide_tag?.trim() || null,
       slide_sub: slide_sub?.trim() || null,

@@ -25,7 +25,6 @@ const JOB_TITLES = [
   'DoS',
   'Teacher',
   'HoD GnC',
-  'Teacher',
   'Other',
 ];
 

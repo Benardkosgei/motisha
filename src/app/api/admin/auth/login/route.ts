@@ -18,7 +18,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
  *    during migration.
  *
  * Body: { email?: string, username?: string, password: string }
- *   - Pass `email` for DB-backed admins (e.g. "admin@motisha.com")
+ *   - Pass `email` for DB-backed admins (e.g. "admin@motisha.co.ke")
  *   - Pass `username` for env-var fallback (legacy)
  *
  * On success sets a signed httpOnly session cookie (8 hours).

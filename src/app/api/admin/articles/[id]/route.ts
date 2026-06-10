@@ -89,6 +89,7 @@ export async function PATCH(
       'premium',
       'week',
       'slide_enabled',
+      'slide_expires_at',
       'slide_title',
       'slide_tag',
       'slide_sub',

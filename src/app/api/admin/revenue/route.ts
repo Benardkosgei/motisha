@@ -6,7 +6,8 @@ import { requireAdminSession, canViewRevenue } from '@/lib/admin-rbac';
  * GET /api/admin/revenue
  *
  * Returns revenue KPIs and trend data sourced from the subscriptions table.
- * Falls back to profile-count estimates when no subscription records exist yet.
+ * Revenue figures are always real — no estimates. If no completed subscription
+ * payments exist yet, revenue fields will be 0 and hasRealData will be false.
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAdminSession(request);
@@ -38,17 +39,19 @@ export async function GET(request: NextRequest) {
       transactionsResult,
       anyCompletedResult,
     ] = await Promise.all([
-      // Active pro subscribers (from profiles)
+      // Active pro subscribers — only those with non-expired subscriptions
       supabaseAdmin
         .from('profiles')
         .select('*', { count: 'exact', head: true })
-        .eq('subscription_tier', 'pro'),
+        .eq('subscription_tier', 'pro')
+        .or('subscription_expires_at.is.null,subscription_expires_at.gt.' + now.toISOString()),
 
-      // Active school subscribers (from profiles)
+      // Active school subscribers — only those with non-expired subscriptions
       supabaseAdmin
         .from('profiles')
         .select('*', { count: 'exact', head: true })
-        .eq('subscription_tier', 'school'),
+        .eq('subscription_tier', 'school')
+        .or('subscription_expires_at.is.null,subscription_expires_at.gt.' + now.toISOString()),
 
       // Current month revenue from subscriptions table
       supabaseAdmin
@@ -72,13 +75,13 @@ export async function GET(request: NextRequest) {
         .eq('status', 'completed')
         .gte('created_at', currentYearStart),
 
-      // Last 12 months trend — group by month
+      // Last 12 months trend — group by month based on subscription start date
       supabaseAdmin
         .from('subscriptions')
-        .select('amount_kes, package, created_at')
+        .select('amount_kes, package, starts_at')
         .eq('status', 'completed')
-        .gte('created_at', new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString())
-        .order('created_at', { ascending: true }),
+        .gte('starts_at', new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString())
+        .order('starts_at', { ascending: true }),
 
       // Recent transactions (paginated, with optional filters)
       (() => {
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
           .select(`
             id, package, billing, amount_kes, payment_method,
             mpesa_receipt, status, created_at,
-            profiles!inner(name, email)
+            profiles!subscriptions_user_id_fkey(name, email)
           `, { count: 'exact' });
 
         // Status filter (default: completed)
@@ -123,37 +126,14 @@ export async function GET(request: NextRequest) {
     const activeProSubscriptions = proCountResult.count ?? 0;
     const activeSchoolSubscriptions = schoolCountResult.count ?? 0;
 
-    // Sum revenue from subscriptions table
+    // Sum revenue from subscriptions table — always real, never estimated
     const sumKES = (rows: Array<{ amount_kes: number }> | null) =>
       (rows ?? []).reduce((s, r) => s + (r.amount_kes ?? 0), 0);
 
-    const currentMonthRevenue = sumKES(currentMonthResult.data);
+    const currentMonthRevenue  = sumKES(currentMonthResult.data);
     const previousMonthRevenue = sumKES(prevMonthResult.data);
-    const currentYearRevenue = sumKES(currentYearResult.data);
-
-    // If no subscription records exist at all, fall back to profile-count estimates
-    // so the dashboard shows something useful during early operation
-    const hasRealData = (anyCompletedResult.count ?? 0) > 0;
-
-    // For estimates, fetch current plan prices rather than hardcoding
-    let proMonthlyPrice = 1500;
-    let schoolMonthlyPrice = 6500;
-    if (!hasRealData) {
-      const { data: planPrices } = await supabaseAdmin
-        .from('plans')
-        .select('package, billing, price_kes')
-        .in('billing', ['monthly']);
-      if (planPrices) {
-        const proPrice = planPrices.find(p => p.package === 'individual' && p.billing === 'monthly');
-        const schoolPrice = planPrices.find(p => p.package === 'admin' && p.billing === 'monthly');
-        if (proPrice) proMonthlyPrice = proPrice.price_kes;
-        if (schoolPrice) schoolMonthlyPrice = schoolPrice.price_kes;
-      }
-    }
-
-    const estimatedMonthly = hasRealData
-      ? currentMonthRevenue
-      : activeProSubscriptions * proMonthlyPrice + activeSchoolSubscriptions * schoolMonthlyPrice;
+    const currentYearRevenue   = sumKES(currentYearResult.data);
+    const hasRealData          = (anyCompletedResult.count ?? 0) > 0;
 
     // Build 12-month trend from actual subscription data
     const trendMap = new Map<string, { revenue: number; pro: number; school: number }>();
@@ -166,7 +146,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const row of trendResult.data ?? []) {
-      const d = new Date(row.created_at);
+      const d = new Date(row.starts_at);
       const key = d.toLocaleString('en-KE', { month: 'short', year: '2-digit' });
       if (trendMap.has(key)) {
         const entry = trendMap.get(key)!;
@@ -202,9 +182,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       kpis: {
-        currentMonthRevenue: hasRealData ? currentMonthRevenue : estimatedMonthly,
-        previousMonthRevenue: hasRealData ? previousMonthRevenue : Math.round(estimatedMonthly * 0.9),
-        currentYearRevenue: hasRealData ? currentYearRevenue : Math.round(estimatedMonthly * 10.5),
+        currentMonthRevenue,
+        previousMonthRevenue,
+        currentYearRevenue,
         activeProSubscriptions,
         activeSchoolSubscriptions,
         hasRealData,

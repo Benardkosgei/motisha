@@ -23,15 +23,15 @@ port = 54324
 file_size_limit = "50MiB"
 
 [auth]
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://localhost:3000", "http://localhost:3000/auth/reset-password", "https://motisha.co.ke/auth/reset-password"]
+site_url = "https://motisha.co.ke"
+additional_redirect_urls = ["http://localhost:3000", "https://localhost:3000", "http://localhost:3000/auth/reset-password", "https://motisha.co.ke/auth/reset-password", "https://motisha.co.ke", "https://www.motisha.co.ke"]
 jwt_expiry = 3600
 enable_signup = true
 
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false   # set true in production
+enable_confirmations = true   # Email verification enabled for production
 
 [auth.sms]
 enable_signup = false

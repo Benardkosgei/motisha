@@ -10,7 +10,15 @@
 
 // ─── Base layout ──────────────────────────────────────────────────────────────
 
-function layout(content: string, systemName = 'Motisha'): string {
+interface LayoutOptions {
+  systemName?: string;
+  logoUrl?: string | null;
+}
+
+function layout(content: string, options?: LayoutOptions): string {
+  const systemName = options?.systemName ?? 'Motisha';
+  const logoUrl = options?.logoUrl;
+  
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,7 +38,10 @@ function layout(content: string, systemName = 'Motisha'): string {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td>
-                    <span style="font-size:1.4rem;font-weight:900;color:#0EA5E9;letter-spacing:-0.02em;">${systemName}</span>
+                    ${logoUrl 
+                      ? `<img src="${logoUrl}" alt="${systemName}" style="height:40px;max-width:180px;object-fit:contain;" />`
+                      : `<span style="font-size:1.4rem;font-weight:900;color:#0EA5E9;letter-spacing:-0.02em;">${systemName}</span>`
+                    }
                   </td>
                   <td align="right">
                     <span style="font-size:0.72rem;color:#475569;text-transform:uppercase;letter-spacing:0.08em;">Inspire · Impact · Transform</span>
@@ -106,6 +117,7 @@ export interface WelcomeEmailData {
   trialDays?: number;
   appUrl: string;
   systemName?: string;
+  logoUrl?: string | null;
 }
 
 export function welcomeEmail(data: WelcomeEmailData): { subject: string; html: string } {
@@ -141,7 +153,7 @@ export function welcomeEmail(data: WelcomeEmailData): { subject: string; html: s
     <p style="font-size:0.76rem;color:#475569;margin:0;line-height:1.6;">
       Your trial ends in ${trial} days. After that, subscribe from KES 1,500/month to keep access.
     </p>
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return { subject: `Welcome to ${sn} — your ${trial}-day trial has started`, html };
 }
@@ -153,6 +165,7 @@ export interface TrialExpiringEmailData {
   daysLeft: number;
   appUrl: string;
   systemName?: string;
+  logoUrl?: string | null;
 }
 
 export function trialExpiringEmail(data: TrialExpiringEmailData): { subject: string; html: string } {
@@ -173,7 +186,7 @@ export function trialExpiringEmail(data: TrialExpiringEmailData): { subject: str
     ])}
 
     ${ctaButton('View Plans & Subscribe', `${data.appUrl}/?tab=pricing`, '#F5A623')}
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return {
     subject: `⏳ Your ${sn} trial ends in ${data.daysLeft} day${data.daysLeft !== 1 ? 's' : ''} — subscribe to keep access`,
@@ -187,6 +200,7 @@ export interface TrialExpiredEmailData {
   name: string;
   appUrl: string;
   systemName?: string;
+  logoUrl?: string | null;
 }
 
 export function trialExpiredEmail(data: TrialExpiredEmailData): { subject: string; html: string } {
@@ -207,7 +221,7 @@ export function trialExpiredEmail(data: TrialExpiredEmailData): { subject: strin
     <p style="font-size:0.76rem;color:#475569;margin:0;line-height:1.6;">
       Plans start from KES 1,500/month. Pay via M-Pesa or bank transfer.
     </p>
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return {
     subject: `Your ${sn} trial has ended — subscribe to restore access`,
@@ -226,6 +240,7 @@ export interface SubscriptionConfirmedEmailData {
   receiptNo?: string;
   appUrl: string;
   systemName?: string;
+  logoUrl?: string | null;
 }
 
 export function subscriptionConfirmedEmail(data: SubscriptionConfirmedEmailData): { subject: string; html: string } {
@@ -254,7 +269,7 @@ export function subscriptionConfirmedEmail(data: SubscriptionConfirmedEmailData)
     </p>
 
     ${ctaButton('Go to ' + sn, data.appUrl)}
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return {
     subject: `✅ ${sn} subscription confirmed — ${packageLabel} ${billingLabel}`,
@@ -275,6 +290,7 @@ export interface BookingConfirmationEmailData {
   ownerWhatsapp: string;
   appUrl: string;
   systemName?: string;
+  logoUrl?: string | null;
 }
 
 export function bookingConfirmationEmail(data: BookingConfirmationEmailData): { subject: string; html: string } {
@@ -302,7 +318,7 @@ export function bookingConfirmationEmail(data: BookingConfirmationEmailData): { 
       (<a href="https://wa.me/${data.ownerWhatsapp.replace(/\D/g, '')}" style="color:#0EA5E9;">${data.ownerWhatsapp}</a>)
       or email within 3 hours to confirm details and discuss the deposit.
     </p>
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return {
     subject: `Booking request received — ${data.serviceType} · ${sn}`,
@@ -331,7 +347,7 @@ export function bookingAdminNotificationEmail(data: BookingConfirmationEmailData
     </div>` : ''}
 
     ${ctaButton('View Bookings Dashboard', `${data.appUrl}/admin/bookings`)}
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return {
     subject: `[${sn}] New booking: ${data.serviceType} from ${data.name}`,
@@ -345,6 +361,7 @@ export interface TestEmailData {
   recipientEmail: string;
   systemName?: string;
   smtpHost: string;
+  logoUrl?: string | null;
 }
 
 export function testEmail(data: TestEmailData): { subject: string; html: string } {
@@ -363,7 +380,7 @@ export function testEmail(data: TestEmailData): { subject: string; html: string 
       Transactional emails (welcome, subscription confirmations, booking notifications) will
       be delivered using this SMTP configuration.
     </p>
-  `, sn);
+  `, { systemName: sn, logoUrl: data.logoUrl });
 
   return { subject: `[${sn}] SMTP test email — configuration verified`, html };
 }

@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { C } from '@/components/Logo';
+import { supabase } from './supabase';
 
 // Palette of accent colours cycled across courses (matches the old static data feel)
 const COURSE_COLORS = [C.teal, C.mustard, C.turquoise, C.success, '#A855F7', '#F43F5E'];
@@ -66,7 +67,15 @@ export function useCourses(userId: string | undefined): UseCoursesResult {
         ? `/api/courses?userId=${encodeURIComponent(userId)}`
         : '/api/courses';
 
-      const res = await fetch(url);
+      // Get the current session token to send with the request
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: HeadersInit = {};
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error('Failed to fetch courses');
       const data = await res.json();
 
@@ -98,8 +107,9 @@ export function useCourses(userId: string | undefined): UseCoursesResult {
       const course = courses.find((c) => c.id === courseId);
       if (!course) return;
 
-      const totalModules = course.modules || 1;
-      const newProgress = Math.round((Math.min(newDone, totalModules) / totalModules) * 100);
+      const totalModules = Math.max(course.modules, 1); // guard against 0-module courses
+      const clampedDone = Math.min(newDone, totalModules);
+      const newProgress = Math.round((clampedDone / totalModules) * 100);
 
       // Optimistic update
       setCourses((prev) =>

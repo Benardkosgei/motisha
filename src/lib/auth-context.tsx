@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { AccountRole, SubscriptionTier } from './profile-access';
+import { generateDeviceFingerprint } from './device-fingerprint';
 
 export interface Profile {
   id: string;
@@ -61,6 +62,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string | null>(null);
+  // Uncomment to show notification before logout:
+  // const [showDeviceMismatch, setShowDeviceMismatch] = useState(false);
+
+  // Generate device fingerprint on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      generateDeviceFingerprint()
+        .then(setDeviceFingerprint)
+        .catch(err => console.error('[auth] Failed to generate device fingerprint:', err));
+    }
+  }, []);
+
+  // Verify device fingerprint periodically (every 30 seconds)
+  useEffect(() => {
+    if (!session || !deviceFingerprint) return;
+
+    const verifySession = async () => {
+      try {
+        const response = await fetch('/api/auth/session-token/verify', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'X-Device-Fingerprint': deviceFingerprint,
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('[auth] Session verification failed:', response.status, response.statusText);
+          // Don't log out on network errors, only on explicit device mismatch
+          return;
+        }
+
+        const data = await response.json();
+        if (!data.valid) {
+          console.warn('[auth] Device fingerprint mismatch detected. Reason:', data.reason);
+          console.info('[auth] This account is now active on another device. Logging out...');
+          await signOut();
+        }
+      } catch (err) {
+        console.error('[auth] Session verification error:', err);
+        // Don't log out on network errors
+      }
+    };
+
+    // Verify immediately, then every 30 seconds
+    verifySession();
+    const interval = setInterval(verifySession, 30000);
+
+    return () => clearInterval(interval);
+  }, [session, deviceFingerprint]);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -106,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (phone.startsWith('254') && !phone.startsWith('+')) {
         phone = '+' + phone;
       }
-      const { error } = await supabase.auth.signInWithPassword({ phone, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ phone, password });
       if (error) {
         // Fallback: try to find email by phone in profiles
         const { data: profileData } = await supabase
@@ -115,19 +167,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('phone', phone)
           .single();
         if (profileData?.email) {
-          const { error: emailError } = await supabase.auth.signInWithPassword({
+          const { data: emailData, error: emailError } = await supabase.auth.signInWithPassword({
             email: profileData.email,
             password,
           });
+          if (!emailError && emailData.session) {
+            await generateSessionToken(emailData.session.access_token);
+          }
           return { error: emailError?.message ?? null };
         }
         return { error: error.message };
       }
+      if (data.session) {
+        await generateSessionToken(data.session.access_token);
+      }
       return { error: null };
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email: emailOrPhone, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: emailOrPhone, password });
+    if (!error && data.session) {
+      await generateSessionToken(data.session.access_token);
+    }
     return { error: error?.message ?? null };
+  };
+
+  const generateSessionToken = async (accessToken: string) => {
+    // If device fingerprint isn't ready yet, generate it now
+    let fingerprint = deviceFingerprint;
+    if (!fingerprint) {
+      console.info('[auth] Generating device fingerprint for session token...');
+      try {
+        fingerprint = await generateDeviceFingerprint();
+        setDeviceFingerprint(fingerprint);
+      } catch (err) {
+        console.error('[auth] Failed to generate device fingerprint:', err);
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch('/api/auth/session-token', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deviceFingerprint: fingerprint }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[auth] Failed to store device fingerprint:', response.status, errorText);
+      } else {
+        console.info('[auth] Device fingerprint stored successfully');
+      }
+    } catch (err) {
+      console.error('[auth] Failed to store device fingerprint:', err);
+    }
   };
 
   const signUp = async (
@@ -163,6 +259,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Store phone in profiles table directly (trigger may not have it yet)
     if (data.user) {
+      // Generate session token for the new user
+      if (data.session) {
+        await generateSessionToken(data.session.access_token);
+      }
+
       await supabase
         .from('profiles')
         .update({
@@ -184,13 +285,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       await startTrial();
 
-      // Send welcome email (fire-and-forget — don't block sign-up on email failure)
+      // Send welcome email — fire-and-forget, no secret needed from client.
+      // The route validates the userId exists and was created within the last 5 minutes.
       fetch('/api/email/welcome', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-secret': process.env.NEXT_PUBLIC_EMAIL_INTERNAL_SECRET ?? '',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: data.user!.id }),
       }).catch((e) => console.warn('[auth] welcome email fire failed:', e));
     }
@@ -200,6 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // No need to clear localStorage for device fingerprint as it's device-specific
   };
 
   const isOnTrial = (): boolean => {

@@ -237,6 +237,7 @@ export default function AdminOverviewPage() {
           icon={Users}
           loading={loading}
           color={C.teal}
+          href="/admin/users"
         />
         <KPICard
           title="Active Subscriptions"
@@ -244,6 +245,7 @@ export default function AdminOverviewPage() {
           icon={CreditCard}
           loading={loading}
           color={C.mustard}
+          href="/admin/revenue"
         />
         <KPICard
           title="Content Published"
@@ -251,6 +253,7 @@ export default function AdminOverviewPage() {
           icon={FileCheck}
           loading={loading}
           color={C.turquoise}
+          href="/admin/speeches"
         />
         <KPICard
           title="Revenue This Month"
@@ -258,6 +261,7 @@ export default function AdminOverviewPage() {
           icon={DollarSign}
           loading={loading}
           color={C.success}
+          href="/admin/revenue"
         />
       </div>
 

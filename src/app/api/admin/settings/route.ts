@@ -17,7 +17,11 @@ export async function GET(request: NextRequest) {
   try {
     const { data, error } = await supabaseAdmin
       .from('system_settings')
-      .select('key, value, updated_at');
+      .select('key, value, updated_at')
+      // Exclude transient M-Pesa pending payment records — they are not settings
+      // and contain partial payment data (phone, amount) that should not be exposed
+      .not('key', 'like', 'mpesa_pending_%')
+      .not('key', 'like', 'mpesa_booking_%');
 
     if (error) throw error;
 
@@ -76,7 +80,6 @@ export async function PATCH(request: NextRequest) {
     const bankAccountName       = formData.get('bank_account_name') as string | null;
     const bankAccountNumber     = formData.get('bank_account_number') as string | null;
     const bankBranch            = formData.get('bank_branch') as string | null;
-    const heroSlidesRaw         = formData.get('hero_slides') as string | null;
     // SMTP config fields
     const smtpHost              = formData.get('smtp_host') as string | null;
     const smtpPort              = formData.get('smtp_port') as string | null;
@@ -255,17 +258,6 @@ export async function PATCH(request: NextRequest) {
       if (bankAccountNumber !== null) merged.account_number = bankAccountNumber;
       if (bankBranch !== null) merged.branch = bankBranch;
       updates.push({ key: 'bank_details', value: merged });
-    }
-
-    // ── Hero slides ───────────────────────────────────────────────────────────
-    if (heroSlidesRaw !== null) {
-      try {
-        const slides = JSON.parse(heroSlidesRaw);
-        if (!Array.isArray(slides)) throw new Error('hero_slides must be an array');
-        updates.push({ key: 'hero_slides', value: slides as unknown as Record<string, unknown> });
-      } catch {
-        return NextResponse.json({ error: 'Invalid hero_slides JSON' }, { status: 400 });
-      }
     }
 
     // ── SMTP config ───────────────────────────────────────────────────────────

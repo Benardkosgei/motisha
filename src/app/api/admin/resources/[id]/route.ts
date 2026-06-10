@@ -97,6 +97,13 @@ export async function PATCH(
   const premium = isForm ? (body.get('premium') === 'true') : Boolean(body.premium);
   const status = isForm ? (body.get('status') as string | null) : body.status;
   const clearFiles = isForm ? body.get('clear_files') === 'true' : Boolean(body.clear_files);
+  const slideEnabledRaw = isForm ? (body.get('slide_enabled') as string | null) : body.slide_enabled;
+  const slideEnabled = slideEnabledRaw !== null ? (isForm ? slideEnabledRaw === 'true' : Boolean(slideEnabledRaw)) : undefined;
+  const slideExpiresAtRaw = isForm ? (body.get('slide_expires_at') as string | null) : body.slide_expires_at;
+  const slideTitle = isForm ? (body.get('slide_title') as string | null) : body.slide_title;
+  const slideTag = isForm ? (body.get('slide_tag') as string | null) : body.slide_tag;
+  const slideSub = isForm ? (body.get('slide_sub') as string | null) : body.slide_sub;
+  const slideAccent = isForm ? (body.get('slide_accent') as string | null) : body.slide_accent;
 
   if (title !== undefined && !String(title).trim()) {
     return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -108,12 +115,23 @@ export async function PATCH(
   if (icon !== undefined) updateData.icon = icon;
   if (description !== undefined) updateData.description = description;
   if (premium !== undefined) updateData.premium = premium;
+  if (slideEnabled !== undefined) updateData.slide_enabled = slideEnabled;
+  if (slideEnabled !== undefined) updateData.slide_expires_at = slideEnabled ? (slideExpiresAtRaw || null) : null;
+  if (slideTitle !== undefined) updateData.slide_title = String(slideTitle).trim() || null;
+  if (slideTag !== undefined) updateData.slide_tag = String(slideTag).trim() || null;
+  if (slideSub !== undefined) updateData.slide_sub = String(slideSub).trim() || null;
+  if (slideAccent !== undefined) updateData.slide_accent = String(slideAccent).trim() || null;
   if (status !== undefined) {
     if (!['draft', 'published'].includes(status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
     updateData.status = status;
-    if (status === 'published') updateData.published_at = new Date().toISOString();
+    // Set published_at and publish_at when publishing
+    if (status === 'published') {
+      const now = new Date().toISOString();
+      updateData.published_at = now;
+      updateData.publish_at = now;
+    }
   }
 
   const files = isForm ? (body.getAll('files') as unknown[]).filter(isUploadFile) : [];

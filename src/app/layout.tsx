@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { createClient } from "@supabase/supabase-js";
+import React, { Suspense } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";import { PageViewTracker } from '@/components/PageViewTracker';
 // ─── Default inline SVG favicon (used when no custom favicon is uploaded) ────
 const DEFAULT_FAVICON =
@@ -75,7 +76,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <ThemeToggle />
-          <PageViewTracker />
+          <Suspense fallback={null}>
+            <PageViewTracker />
+          </Suspense>
           {children}
         </AuthProvider>
       </body>

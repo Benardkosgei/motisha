@@ -66,6 +66,7 @@ export async function PATCH(
     const premiumRaw = formData.get('premium') as string | null;
     const week = (formData.get('week') as string | null)?.trim();
     const slideEnabledRaw = formData.get('slide_enabled') as string | null;
+    const slideExpiresAtRaw = (formData.get('slide_expires_at') as string | null)?.trim();
     const slideTitle = (formData.get('slide_title') as string | null)?.trim();
     const slideTag = (formData.get('slide_tag') as string | null)?.trim();
     const slideSub = (formData.get('slide_sub') as string | null)?.trim();
@@ -100,6 +101,7 @@ export async function PATCH(
     if (premiumRaw !== null) updateData.premium = premiumRaw === 'true';
     if (week !== undefined) updateData.week = week;
     if (slideEnabledRaw !== null) updateData.slide_enabled = slideEnabledRaw === 'true';
+    if (slideEnabledRaw !== null) updateData.slide_expires_at = slideEnabledRaw === 'true' ? (slideExpiresAtRaw || null) : null;
     if (slideTitle !== undefined) updateData.slide_title = slideTitle || null;
     if (slideTag !== undefined) updateData.slide_tag = slideTag || null;
     if (slideSub !== undefined) updateData.slide_sub = slideSub || null;

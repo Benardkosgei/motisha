@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Lock, Search, Loader2 } from 'lucide-react';
 import { C, TYPE_COLORS_MAP } from './Logo';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -10,6 +10,8 @@ import { isPaidSubscriptionTier } from '@/lib/profile-access';
 
 interface ResourcesTabProps {
   profile: Profile | null;
+  initialId?: string;
+  onContentViewed?: (contentId: string) => void;
 }
 
 interface Resource {
@@ -27,17 +29,218 @@ interface Resource {
 
 const RESOURCE_TYPES = ['All', 'Resource', 'Guide', 'Template'];
 
-export function ResourcesTab({ profile }: ResourcesTabProps) {
+// ─── Detail view ──────────────────────────────────────────────────────────────
+
+function ResourceDetail({
+  resource,
+  isPaid,
+  onBack,
+}: {
+  resource: Resource;
+  isPaid: boolean;
+  onBack: () => void;
+}) {
+  const locked = resource.premium && !isPaid;
+  const typeColor = (TYPE_COLORS_MAP as Record<string, string>)[resource.type] ?? C.teal;
+
+  return (
+    <div style={{ maxWidth: 760, paddingBottom: 60 }}>
+      <button
+        onClick={onBack}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: C.gray, fontSize: '0.82rem', fontWeight: 600,
+          padding: '0 0 20px', fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
+        <ArrowLeft size={15} />
+        Back to Resources
+      </button>
+
+      <div style={{ borderRadius: 20, overflow: 'hidden', border: `1px solid ${typeColor}30`, marginBottom: 28 }}>
+        {/* Header band */}
+        <div style={{
+          padding: '28px 32px 24px',
+          background: `linear-gradient(135deg, ${typeColor}22 0%, ${typeColor}08 60%, transparent 100%)`,
+          borderBottom: `1px solid ${typeColor}20`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 16, flexShrink: 0,
+              background: `${typeColor}20`, border: `1px solid ${typeColor}35`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '2rem',
+            }}>
+              {resource.icon ?? '📄'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.12em',
+                  padding: '3px 10px', borderRadius: 6,
+                  background: `${typeColor}20`, color: typeColor, border: `1px solid ${typeColor}35`,
+                }}>
+                  {resource.type.toUpperCase()}
+                </span>
+                {resource.premium && (
+                  <span style={{
+                    fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.08em',
+                    padding: '3px 10px', borderRadius: 6,
+                    background: `${C.mustard}20`, color: C.mustard, border: `1px solid ${C.mustard}35`,
+                  }}>
+                    PRO
+                  </span>
+                )}
+              </div>
+              <h1 style={{
+                color: C.white,
+                fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+                fontSize: 'clamp(1.4rem, 3vw, 2rem)',
+                letterSpacing: '0.06em',
+                lineHeight: 1.15,
+                margin: '0 0 8px',
+              }}>
+                {resource.title}
+              </h1>
+              <p style={{ color: C.grayDark, fontSize: '0.74rem', margin: 0 }}>
+                Published {new Date(resource.created_at).toLocaleDateString('en-KE', {
+                  day: 'numeric', month: 'long', year: 'numeric',
+                })}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '28px 32px', background: C.navyMid }}>
+          {resource.description ? (
+            <div style={{ marginBottom: 28 }}>
+              <h2 style={{
+                color: C.gray, fontSize: '0.7rem', fontWeight: 800,
+                letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10,
+              }}>
+                About this {resource.type.toLowerCase()}
+              </h2>
+              <p style={{ color: C.offWhite, fontSize: '0.95rem', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
+                {resource.description}
+              </p>
+            </div>
+          ) : (
+            <p style={{ color: C.grayDark, fontSize: '0.88rem', marginBottom: 28 }}>
+              No description provided.
+            </p>
+          )}
+
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 28 }} />
+
+          <h2 style={{
+            color: C.gray, fontSize: '0.7rem', fontWeight: 800,
+            letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16,
+          }}>
+            File
+          </h2>
+
+          {locked ? (
+            <div style={{
+              borderRadius: 14, padding: '24px 28px',
+              background: `${C.mustard}0c`, border: `1px solid ${C.mustard}30`,
+              display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: `${C.mustard}18`, border: `1px solid ${C.mustard}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Lock size={20} color={C.mustard} />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ color: C.mustard, fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>
+                  Pro content
+                </div>
+                <div style={{ color: C.gray, fontSize: '0.8rem', lineHeight: 1.5 }}>
+                  Upgrade to a Pro or School plan to download this {resource.type.toLowerCase()}.
+                </div>
+              </div>
+              <a
+                href="/?tab=pricing"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '10px 20px', borderRadius: 10, fontWeight: 800,
+                  fontSize: '0.82rem', textDecoration: 'none',
+                  background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`,
+                  color: C.navy, flexShrink: 0,
+                }}
+              >
+                Upgrade Now
+              </a>
+            </div>
+          ) : resource.file_url ? (
+            <div style={{
+              borderRadius: 14, padding: '20px 24px',
+              background: `${typeColor}0a`, border: `1px solid ${typeColor}25`,
+              display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: `${typeColor}18`, border: `1px solid ${typeColor}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.4rem',
+              }}>
+                📄
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ color: C.white, fontWeight: 700, fontSize: '0.88rem', marginBottom: 3 }}>
+                  {resource.title}
+                </div>
+                <div style={{ color: C.gray, fontSize: '0.76rem' }}>
+                  {resource.type} · Ready to download
+                </div>
+              </div>
+              <button
+                onClick={() => window.open(resource.file_url!, '_blank', 'noopener,noreferrer')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '11px 22px', borderRadius: 10, fontWeight: 800,
+                  fontSize: '0.84rem', border: 'none', cursor: 'pointer', flexShrink: 0,
+                  background: `linear-gradient(135deg, ${typeColor}, ${typeColor}cc)`,
+                  color: '#fff',
+                }}
+              >
+                <Download size={15} />
+                Download
+              </button>
+            </div>
+          ) : (
+            <div style={{
+              borderRadius: 14, padding: '20px 24px',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+              color: C.grayDark, fontSize: '0.85rem', textAlign: 'center',
+            }}>
+              No file attached to this {resource.type.toLowerCase()} yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── List view ────────────────────────────────────────────────────────────────
+
+export function ResourcesTab({ profile, initialId, onContentViewed }: ResourcesTabProps) {
   const { session } = useAuth();
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Resource | null>(null);
 
   const isPaid = isPaidSubscriptionTier(profile?.subscription_tier);
 
   const fetchResources = useCallback(async () => {
+    if (!session) return;
     setLoading(true);
     setError(null);
     try {
@@ -64,17 +267,54 @@ export function ResourcesTab({ profile }: ResourcesTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [search, filter]);
+  }, [session, search, filter]);
 
   useEffect(() => {
     fetchResources();
   }, [fetchResources]);
 
-  const handleDownload = async (resource: Resource) => {
-    if (resource.premium && !isPaid) return;
-    if (!resource.file_url) return;
-    window.open(resource.file_url, '_blank', 'noopener,noreferrer');
-  };
+  // Auto-open item when navigated from a notification
+  useEffect(() => {
+    if (!initialId || resources.length === 0) return;
+    const found = resources.find(r => r.id === initialId);
+    if (found) {
+      setSelected(found);
+      // Mark related notifications as read
+      if (onContentViewed) {
+        onContentViewed(initialId);
+      }
+    }
+  }, [resources, initialId, onContentViewed]);
+
+  // If initialId points to an item not in the current filter/search, fetch it directly
+  useEffect(() => {
+    if (!initialId || loading || selected) return;
+    // Not found in filtered list — fetch the specific item directly
+    supabase
+      .from('contents')
+      .select('*')
+      .eq('id', initialId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setSelected(data as Resource);
+          // Mark related notifications as read
+          if (onContentViewed) {
+            onContentViewed(initialId);
+          }
+        }
+      });
+  }, [initialId, loading, selected, onContentViewed]);
+
+  if (selected) {
+    return (
+      <ResourceDetail
+        resource={selected}
+        isPaid={isPaid}
+        onBack={() => setSelected(null)}
+      />
+    );
+  }
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -177,24 +417,18 @@ export function ResourcesTab({ profile }: ResourcesTabProps) {
                     {new Date(r.created_at).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>
                 </div>
-                {r.file_url ? (
-                  <button
-                    onClick={() => handleDownload(r)}
-                    disabled={locked}
-                    aria-label={locked ? 'Upgrade to download' : `Download ${r.title}`}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.76rem', flexShrink: 0,
-                      background: locked ? 'rgba(255,255,255,0.05)' : `${typeColor}20`,
-                      color: locked ? C.grayDark : typeColor,
-                      border: `1px solid ${locked ? 'rgba(255,255,255,0.08)' : `${typeColor}30`}`,
-                      cursor: locked ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {locked ? '🔒 Pro' : <><Download size={13} /> Download</>}
-                  </button>
-                ) : (
-                  <div style={{ color: C.grayDark, fontSize: '0.72rem', flexShrink: 0 }}>No file</div>
-                )}
+                <button
+                  onClick={() => setSelected(r)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.76rem', flexShrink: 0,
+                    background: locked ? 'rgba(255,255,255,0.05)' : `${typeColor}20`,
+                    color: locked ? C.grayDark : typeColor,
+                    border: `1px solid ${locked ? 'rgba(255,255,255,0.08)' : `${typeColor}30`}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {locked ? <><Lock size={11} /> Pro</> : 'Open →'}
+                </button>
               </div>
             );
           })}

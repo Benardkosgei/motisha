@@ -35,7 +35,7 @@ const FALLBACK_FEATURES: Record<PackageType, string[]> = {
   admin: [
     'Up to 5 staff accounts',
     'Principal, Deputy, Senior Teacher, DoS, HoD G&C',
-    'All individual features for each account',
+    'All content access for each account (same as Individual)',
     'School-wide access',
     'Usage analytics',
     'Priority support',
@@ -391,7 +391,7 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
           <div style={{ marginTop: currentTier === 'school' ? 20 : 0 }}>
             <div style={{ fontSize: '2rem', marginBottom: 8 }}>🏫</div>
             <h3 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem', marginBottom: 4 }}>Admin</h3>
-            <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 16 }}>For school leadership teams</p>
+            <p style={{ color: C.gray, fontSize: '0.78rem', marginBottom: 16 }}>For school leadership teams · same content as Individual</p>
             <div style={{ marginBottom: 20 }}>
               <span style={{ color: C.white, fontWeight: 900, fontSize: '2rem' }}>
                 {plansLoading ? '…' : `KES ${prices.admin[billing].toLocaleString()}`}
@@ -452,10 +452,11 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
             // Poll for profile update — the M-Pesa callback updates the DB
             // asynchronously, so we retry a few times with a delay.
             let attempts = 0;
-            const poll = setInterval(async () => {
-              await refreshProfile();
-              attempts++;
-              if (attempts >= 6) clearInterval(poll); // stop after ~30s
+            const poll = setInterval(() => {
+              refreshProfile().finally(() => {
+                attempts++;
+                if (attempts >= 6) clearInterval(poll); // stop after ~30s
+              });
             }, 5000);
           }}
         />

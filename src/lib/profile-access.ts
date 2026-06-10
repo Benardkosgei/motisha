@@ -36,14 +36,17 @@ export function canAccessPremiumContent(
 
 /**
  * Can the user access newsletters?
- * School-tier subscribers always can.
+ * Both pro and school subscribers can access newsletters — newsletters are not
+ * exclusive to the school plan.  The school plan differs from pro only in that
+ * it covers multiple accounts (up to 5 staff members); the content access is
+ * identical.
  * Trial users also get access — pass `onTrial = true` from `isOnTrial()`.
  */
 export function canAccessNewsletters(
   tier: SubscriptionTier | undefined | null,
   onTrial = false
 ): boolean {
-  if (tier === 'school') return true;
+  if (tier === 'pro' || tier === 'school') return true;
   return onTrial; // trial grants newsletter access
 }
 

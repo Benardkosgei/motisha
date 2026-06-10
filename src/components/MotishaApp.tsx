@@ -28,7 +28,23 @@ const NotificationsTab = lazy(() => import('./NotificationsTab').then(m => ({ de
 const UploadPopup      = lazy(() => import('./UploadPopup').then(m => ({ default: m.UploadPopup })));
 
 function TabSkeleton() {
-  return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8 }}>
+      {[1, 2, 3].map(i => (
+        <div
+          key={i}
+          style={{
+            height: 72, borderRadius: 12,
+            background: 'linear-gradient(90deg, rgba(14,165,233,0.06) 25%, rgba(14,165,233,0.12) 50%, rgba(14,165,233,0.06) 75%)',
+            backgroundSize: '400% 100%',
+            animation: 'tab-shimmer 1.4s ease-in-out infinite',
+            animationDelay: `${i * 0.1}s`,
+          }}
+        />
+      ))}
+      <style>{`@keyframes tab-shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }`}</style>
+    </div>
+  );
 }
 
 // Valid tab IDs for validation
@@ -48,10 +64,23 @@ export function MotishaApp() {
   const nav: NavItem = resolveTab(searchParams.get('tab'));
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [sessionInvalidated, setSessionInvalidated] = useState(false);
   // Track which tabs have been mounted at least once (for lazy loading)
   const [visited, setVisited] = useState<Set<NavItem>>(() => new Set([resolveTab(null)]));
 
   const unread = notifications.filter(n => !n.read).length;
+
+  // Listen for auth state changes to detect forced logouts
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT' && session) {
+        // User was signed out while they had a session - likely due to another device login
+        setSessionInvalidated(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [session]);
 
   const fetchNotifications = useCallback(async () => {
     if (!session?.user) return;
@@ -59,6 +88,7 @@ export function MotishaApp() {
       .from('notifications')
       .select('*')
       .eq('user_id', session.user.id)
+      .eq('read', false)
       .order('created_at', { ascending: false })
       .limit(20);
     if (data) setNotifications(data as Notification[]);
@@ -112,8 +142,43 @@ export function MotishaApp() {
       .update({ read: true })
       .eq('user_id', session.user.id)
       .eq('read', false);
-    setNotifications(n => n.map(x => ({ ...x, read: true })));
+    // Remove all read notifications from the list — they've been acknowledged
+    setNotifications([]);
   };
+
+  const handleMarkOneRead = useCallback(async (id: string) => {
+    if (!session?.user) return;
+    await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', id)
+      .eq('user_id', session.user.id);
+    // Remove the notification from the list once it's been read
+    setNotifications(prev => prev.filter(x => x.id !== id));
+  }, [session?.user]);
+
+  // Mark notifications as read when user opens related content
+  const handleContentViewed = useCallback(async (contentId: string) => {
+    if (!session?.user) return;
+    
+    // Find notifications related to this content
+    const relatedNotifications = notifications.filter(
+      n => !n.read && n.content_id === contentId
+    );
+    
+    if (relatedNotifications.length === 0) return;
+    
+    // Mark them as read in the database
+    await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', session.user.id)
+      .eq('content_id', contentId)
+      .eq('read', false);
+    
+    // Remove from local state
+    setNotifications(prev => prev.filter(n => !(n.content_id === contentId && !n.read)));
+  }, [session?.user, notifications]);
 
   const getPageTitle = () => {
     const firstName = profile?.name?.split(' ')[0] ?? 'there';
@@ -206,6 +271,32 @@ export function MotishaApp() {
                 style={{ padding: '5px 14px', borderRadius: 7, fontWeight: 800, fontSize: '0.74rem', background: C.mustard, color: C.navy, border: 'none', cursor: 'pointer', flexShrink: 0 }}
               >
                 Subscribe Now
+              </button>
+            </div>
+          )}
+
+          {/* Session invalidated banner (another device login) */}
+          {sessionInvalidated && (
+            <div style={{
+              padding: '8px 32px',
+              background: `linear-gradient(135deg, ${C.danger}18, ${C.danger}08)`,
+              borderBottom: `1px solid ${C.danger}30`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '1rem' }}>🔒</span>
+                <span style={{ color: C.danger, fontWeight: 700, fontSize: '0.8rem' }}>
+                  You've been logged in from a different device
+                </span>
+                <span style={{ color: C.gray, fontSize: '0.76rem' }}>
+                  · Only one device can be active at a time · Multiple browsers on the same device are allowed
+                </span>
+              </div>
+              <button
+                onClick={() => {setSessionInvalidated(false); signOut();}}
+                style={{ padding: '5px 14px', borderRadius: 7, fontWeight: 800, fontSize: '0.74rem', background: C.danger, color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+              >
+                Dismiss
               </button>
             </div>
           )}
@@ -313,7 +404,7 @@ export function MotishaApp() {
         <div style={tabStyle('courses')}>
           {visited.has('courses') && (
             <Suspense fallback={<TabSkeleton />}>
-              <CoursesTab initialId={searchParams.get('id') ?? undefined} />
+              <CoursesTab initialId={searchParams.get('id') ?? undefined} onContentViewed={handleContentViewed} />
             </Suspense>
           )}
         </div>
@@ -337,7 +428,7 @@ export function MotishaApp() {
         <div style={tabStyle('resources')}>
           {visited.has('resources') && (
             <Suspense fallback={<TabSkeleton />}>
-              <ResourcesTab profile={profile} />
+              <ResourcesTab profile={profile} initialId={searchParams.get('id') ?? undefined} onContentViewed={handleContentViewed} />
             </Suspense>
           )}
         </div>
@@ -345,7 +436,7 @@ export function MotishaApp() {
         <div style={tabStyle('speeches')}>
           {visited.has('speeches') && (
             <Suspense fallback={<TabSkeleton />}>
-              <SpeechesTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
+              <SpeechesTab profile={profile} initialId={searchParams.get('id') ?? undefined} onContentViewed={handleContentViewed} />
             </Suspense>
           )}
         </div>
@@ -353,7 +444,7 @@ export function MotishaApp() {
         <div style={tabStyle('articles')}>
           {visited.has('articles') && (
             <Suspense fallback={<TabSkeleton />}>
-              <ArticlesTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
+              <ArticlesTab profile={profile} initialId={searchParams.get('id') ?? undefined} onContentViewed={handleContentViewed} />
             </Suspense>
           )}
         </div>
@@ -361,7 +452,7 @@ export function MotishaApp() {
         <div style={tabStyle('newsletters')}>
           {visited.has('newsletters') && (
             <Suspense fallback={<TabSkeleton />}>
-              <NewslettersTab profile={profile} initialId={searchParams.get('id') ?? undefined} />
+              <NewslettersTab profile={profile} initialId={searchParams.get('id') ?? undefined} onContentViewed={handleContentViewed} />
             </Suspense>
           )}
         </div>
@@ -377,7 +468,7 @@ export function MotishaApp() {
         <div style={tabStyle('notifications')}>
           {visited.has('notifications') && (
             <Suspense fallback={<TabSkeleton />}>
-              <NotificationsTab notifications={notifications} onMarkRead={handleMarkRead} />
+              <NotificationsTab notifications={notifications} onMarkRead={handleMarkRead} onMarkOneRead={handleMarkOneRead} />
             </Suspense>
           )}
         </div>

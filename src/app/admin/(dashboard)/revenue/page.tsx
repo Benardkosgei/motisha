@@ -130,6 +130,8 @@ export default function RevenuePage() {
   }
 
   const kpis = data?.kpis;
+  const activeProSubscriptions  = kpis?.activeProSubscriptions  ?? 0;
+  const activeSchoolSubscriptions = kpis?.activeSchoolSubscriptions ?? 0;
 
   return (
     <div>
@@ -140,9 +142,14 @@ export default function RevenuePage() {
           </h1>
           <p style={{ margin: '4px 0 0', color: C.gray, fontSize: '0.82rem' }}>
             Subscription analytics and financial overview.
-            {kpis && !kpis.hasRealData && (
+            {kpis && !kpis.hasRealData && (activeProSubscriptions > 0 || activeSchoolSubscriptions > 0) && (
               <span style={{ color: C.mustard, marginLeft: 8 }}>
-                ⚠ Showing estimates — no completed subscription payments recorded yet.
+                ⚠ {(activeProSubscriptions ?? 0) + (activeSchoolSubscriptions ?? 0)} active subscriber{((activeProSubscriptions ?? 0) + (activeSchoolSubscriptions ?? 0)) !== 1 ? 's' : ''} found but no payment records — accounts may have been activated manually.
+              </span>
+            )}
+            {kpis && !kpis.hasRealData && !activeProSubscriptions && !activeSchoolSubscriptions && (
+              <span style={{ color: C.gray, marginLeft: 8 }}>
+                No subscription payments recorded yet.
               </span>
             )}
           </p>
@@ -182,8 +189,8 @@ export default function RevenuePage() {
                 trend={momPct !== null ? { value: momPct, label: 'vs last month' } : undefined} />
               <KPICard title="Revenue Last Month" value={`KES ${prev.toLocaleString()}`} icon={Calendar} loading={loading} color={C.teal} />
               <KPICard title="Revenue This Year" value={`KES ${(kpis?.currentYearRevenue ?? 0).toLocaleString()}`} icon={TrendingUp} loading={loading} color={C.turquoise} />
-              <KPICard title="Active Pro Subscribers" value={String(kpis?.activeProSubscriptions ?? 0)} icon={Star} loading={loading} color={C.mustard} />
-              <KPICard title="Active School Subscribers" value={String(kpis?.activeSchoolSubscriptions ?? 0)} icon={School} loading={loading} color={C.tealGlow} />
+              <KPICard title="Active Pro Subscribers" value={String(activeProSubscriptions)} icon={Star} loading={loading} color={C.mustard} />
+              <KPICard title="Active School Subscribers" value={String(activeSchoolSubscriptions)} icon={School} loading={loading} color={C.tealGlow} />
             </>
           );
         })()}

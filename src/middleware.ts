@@ -19,8 +19,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Always allow the login page through
+  // Always allow the login page through — but redirect already-authed admins to dashboard
   if (pathname === '/admin/login') {
+    const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+    if (token) {
+      const payload = await verifyAdminToken(token);
+      if (payload) {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+    }
     return NextResponse.next();
   }
 

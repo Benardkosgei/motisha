@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     const premium = formData.get('premium') === 'true';
     const week = (formData.get('week') as string | null)?.trim() ?? '';
     const slideEnabled = formData.get('slide_enabled') === 'true';
+    const slideExpiresAtRaw = (formData.get('slide_expires_at') as string | null)?.trim() ?? '';
     const slideTitle = (formData.get('slide_title') as string | null)?.trim() ?? '';
     const slideTag = (formData.get('slide_tag') as string | null)?.trim() ?? '';
     const slideSub = (formData.get('slide_sub') as string | null)?.trim() ?? '';
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
       premium,
       week,
       slide_enabled: slideEnabled,
+      slide_expires_at: slideEnabled ? (slideExpiresAtRaw || null) : null,
       slide_title: slideTitle || null,
       slide_tag: slideTag || null,
       slide_sub: slideSub || null,

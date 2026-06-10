@@ -145,7 +145,7 @@ export const pieStrokeWidth = 2;
 export const CHART_THEME = {
   colors: chartColors,
   grid: gridStroke,
-  axis: C.gray,
+  axis: axisStyle,
   tooltipBg: C.navyMid,
   tooltipBorder: C.navyLight,
   tooltipText: C.white,
