@@ -10,7 +10,7 @@ interface UploadPopupProps {
   onDismiss?: () => void;
 }
 
-type LatestContent = Pick<Content, 'title' | 'type' | 'week' | 'premium'>;
+type LatestContent = Pick<Content, 'title' | 'type' | 'week' | 'premium' | 'access_tier'>;
 
 const TYPE_ICONS: Record<string, string> = {
   Speech: '🎤',
@@ -27,14 +27,13 @@ export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
   const [content, setContent] = useState<LatestContent | null>(null);
 
   useEffect(() => {
-    // Fetch the most recently published content item
+    // Fetch the most recently published content item (any tier)
     const fetchLatest = async () => {
       try {
         const result = await supabase
           .from('contents')
-          .select('title, type, week, premium')
+          .select('title, type, week, premium, access_tier')
           .eq('status', 'published')
-          .eq('access_tier', 'free') // Only fetch free content for popup (accessible to all)
           .order('published_at', { ascending: false })
           .limit(1);
 
@@ -69,7 +68,9 @@ export function UploadPopup({ onOpen, onDismiss }: UploadPopupProps) {
   if (!visible || !content) return null;
 
   const icon = TYPE_ICONS[content.type] ?? '📄';
-  const accessLabel = content.premium ? 'Pro' : 'Free';
+  const accessLabel =
+    content.access_tier === 'school' ? 'School' :
+    content.access_tier === 'pro'    ? 'Pro' : 'Free';
   const weekLabel = content.week ? `${content.week} · ` : '';
 
   return (

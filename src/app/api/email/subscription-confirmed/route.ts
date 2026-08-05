@@ -2,13 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendMail } from '@/lib/mailer';
 import { subscriptionConfirmedEmail } from '@/lib/email-templates';
+import { subscriptionEmailLimiter, getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/email/subscription-confirmed
  * Internal route — called after a subscription is marked completed.
- * Body: { subscriptionId: string }
  */
 export async function POST(request: NextRequest) {
+  // Rate limit: 1 per 5 min per IP (secondary guard — primary is the internal secret)
+  const ip = getClientIp(request);
+  if (!subscriptionEmailLimiter.check(ip)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   const secret = request.headers.get('x-internal-secret');
   if (!secret || secret !== process.env.EMAIL_INTERNAL_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

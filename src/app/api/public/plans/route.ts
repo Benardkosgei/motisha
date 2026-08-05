@@ -23,8 +23,9 @@ export async function GET() {
       { plans: data ?? [] },
       {
         headers: {
-          // Cache for 5 minutes — plan prices don't change often
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
+          // Short cache — plans can be edited in the admin dashboard and
+          // should reflect promptly. 60s CDN cache + no stale serving.
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=0',
         },
       }
     );

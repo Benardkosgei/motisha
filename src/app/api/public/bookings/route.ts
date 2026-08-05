@@ -2,18 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendMail } from '@/lib/mailer';
 import { bookingConfirmationEmail, bookingAdminNotificationEmail } from '@/lib/email-templates';
+import { BookingPublicCreateSchema, validateBody } from '@/lib/validation-schemas';
+import { bookingsLimiter, getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/public/bookings
- * Creates a new booking from the teacher-facing Book a Service tab.
- * Auth is optional — logged-in users have user_id set, guests do not.
- * Sends two emails on success (fire-and-forget):
- *   1. Confirmation to the teacher/requester
- *   2. Admin notification to the owner
  */
 export async function POST(req: NextRequest) {
+  // Rate limit: 5 bookings per 10 minutes per IP
+  const ip = getClientIp(req);
+  if (!bookingsLimiter.check(ip)) {
+    return NextResponse.json(
+      { error: 'Too many booking requests. Please try again in a few minutes.' },
+      { status: 429 }
+    );
+  }
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+
+    const validation = validateBody(BookingPublicCreateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
+    }
 
     const {
       user_id,
@@ -34,21 +45,7 @@ export async function POST(req: NextRequest) {
       contact_email,
       attendees,
       description,
-    } = body;
-
-    // Minimal validation
-    if (!service_name?.trim()) {
-      return NextResponse.json({ error: 'service_name is required' }, { status: 400 });
-    }
-    if (!contact_name?.trim() || !contact_phone?.trim()) {
-      return NextResponse.json({ error: 'contact_name and contact_phone are required' }, { status: 400 });
-    }
-    if (!school?.trim()) {
-      return NextResponse.json({ error: 'school is required' }, { status: 400 });
-    }
-    if (!description?.trim()) {
-      return NextResponse.json({ error: 'description is required' }, { status: 400 });
-    }
+    } = validation.data;
 
     const deposit_amount = fee ? Math.round(fee * 0.5) : null;
 

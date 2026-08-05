@@ -81,22 +81,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const verifySession = async () => {
       try {
+        // Always use the latest (auto-refreshed) access token, not the stale one from state
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!currentSession) return; // session ended, let onAuthStateChange handle it
+
         const response = await fetch('/api/auth/session-token/verify', {
-          method: 'POST',
+          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${currentSession.access_token}`,
             'X-Device-Fingerprint': deviceFingerprint,
           },
         });
 
         if (!response.ok) {
+          // 401 = token issue (expired/invalid), not a device mismatch — skip logout
           console.warn('[auth] Session verification failed:', response.status, response.statusText);
-          // Don't log out on network errors, only on explicit device mismatch
           return;
         }
 
         const data = await response.json();
-        if (!data.valid) {
+        // Only force-logout on an explicit device mismatch, not token/server errors
+        if (!data.valid && data.reason && data.reason !== 'Invalid token' && data.reason !== 'Server error') {
           console.warn('[auth] Device fingerprint mismatch detected. Reason:', data.reason);
           console.info('[auth] This account is now active on another device. Logging out...');
           await signOut();

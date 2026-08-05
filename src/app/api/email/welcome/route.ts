@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendMail } from '@/lib/mailer';
 import { welcomeEmail } from '@/lib/email-templates';
+import { welcomeEmailLimiter, getClientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/email/welcome
- * Called client-side immediately after sign-up.
- * Protected by verifying the userId belongs to an account created within the
- * last 5 minutes — prevents arbitrary welcome emails to existing users.
  */
 export async function POST(request: NextRequest) {
+  // Rate limit: 1 welcome email per 5 min per IP
+  const ip = getClientIp(request);
+  if (!welcomeEmailLimiter.check(ip)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
     const { userId } = await request.json();
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });

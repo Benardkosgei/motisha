@@ -84,6 +84,32 @@ Paste and run each file in order from `supabase/migrations/`:
 20250513000020_bookings_and_services.sql
 20260515071240_update_notification_trigger.sql
 20260516000022_fix_gaps.sql
+20260518000023_course_thumbnails_bucket.sql
+20260518000024_contents_access_tier.sql
+20260518000025_contact_settings.sql
+20260518000026_dynamic_commission_rates.sql
+20260522000027_trial_expiry_notification.sql
+20260522000028_smtp_config.sql
+20260525000029_profile_job_title.sql
+20260530000000_site_visits_table.sql
+20260601000000_add_resource_file_urls.sql
+20260601000025_add_content_slider_fields.sql
+20260601000026_notification_content_link.sql
+20260602000027_fix_notification_trigger_icons.sql
+20260602000028_site_visits_index.sql
+20260603000029_site_visits_rls.sql
+20260603000030_system_settings_restrict_sensitive.sql
+20260603000031_trial_reminder_tracking.sql
+20260603000032_contents_rls_access_tier.sql
+20260603000033_single_session_enforcement.sql
+20260604000034_fix_system_settings_rls.sql
+20260606000035_notification_system_settings_check.sql
+20260610000036_add_slide_expires_at.sql
+20260616000037_ensure_content_files_bucket.sql
+20260715000038_payment_gaps.sql
+20260722000039_mpesa_payment_logs.sql
+20260803000040_payout_requests.sql
+20260804000041_plans_drop_stale_active_subscribers.sql
 ```
 
 #### Option B — Supabase CLI
@@ -134,7 +160,7 @@ They share the same Supabase database but use different auth systems. The admin 
 
 ## Database Structure
 
-22 migrations. Key tables:
+41 migrations. Key tables:
 
 | Table | Description |
 |---|---|
@@ -147,7 +173,9 @@ They share the same Supabase database but use different auth systems. The admin 
 | `referral_commissions` | Commission earned per referral on subscription completion |
 | `plans` | Subscription plan definitions (individual/admin × monthly/termly/yearly) |
 | `subscriptions` | Payment records |
+| `payout_requests` | Teacher commission withdrawal requests |
 | `admin_sub_accounts` | Up to 5 staff accounts under an admin subscription |
+| `author_submissions` | Content submitted by teachers for admin review |
 | `system_settings` | Key-value config store (logo, email, M-Pesa, notifications) |
 | `admin_audit_log` | Security log of all destructive admin actions |
 | `service_menus` | Admin-managed service catalogue |
@@ -197,7 +225,9 @@ Access at `/admin/login`. Two roles:
 | `/admin/plans` | Edit pricing, features, limits |
 | `/admin/users` | Search, filter, suspend, change tier, view detail |
 | `/admin/revenue` | KPIs, charts, filterable transaction list, CSV export |
-| `/admin/settings` | Logo, favicon, system name, email, M-Pesa, referral rates, academic calendar, security |
+| `/admin/author-submissions` | Review, approve, and reject teacher-authored content |
+| `/admin/payout-requests` | Manage teacher commission payout requests |
+| `/admin/settings` | Logo, favicon, system name, email, M-Pesa (incl. till number), referral rates, team management, academic calendar, security |
 
 ---
 
@@ -259,7 +289,10 @@ You can also trigger it manually from **Admin → Settings → Scheduled Publish
 - **Bookings** — Manage service bookings, record deposits (bank/M-Pesa/card)
 - **Revenue** — KPIs, 12-month trend chart, filterable transaction list, CSV export
 - **Plans** — Edit pricing, features, and download limits per plan
-- **Settings** — Branding, email config, M-Pesa config, referral rates, academic calendar
+- **Author submissions** — Review, approve/reject teacher-submitted content; credit earnings
+- **Payout requests** — Approve and track teacher commission payouts
+- **Team management** — Invite up to 5 sub-accounts for school plan subscribers
+- **Settings** — Branding, email config, M-Pesa config (shortcode + till number), referral rates, academic calendar
 - **Audit log** — All destructive operations logged to `admin_audit_log`
 
 ---
@@ -308,6 +341,5 @@ CI/CD is configured in `.github/workflows/deploy.yml`.
 
 ## Known Limitations
 
-- **M-Pesa settings in Admin → Settings** are for reference only. Live payment routes read credentials from `.env.local`. Update env vars and redeploy to change live payment behaviour.
 - **Referral commission rates in Admin → Settings** are for display only. The actual rates are hardcoded in the `handle_subscription_commission` Postgres trigger. Update the trigger in migration `20250510000015` to change live rates.
 - **Revenue KPIs** show estimates (based on profile counts) until real subscription payment records exist in the `subscriptions` table.

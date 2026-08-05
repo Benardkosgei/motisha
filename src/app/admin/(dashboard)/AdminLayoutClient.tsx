@@ -49,6 +49,7 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Top bar */}
         <header
+          className="admin-topbar"
           style={{
             height: 60,
             background: 'var(--surface)',
@@ -150,7 +151,7 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+        <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }} className="admin-main-content">
           {children}
         </main>
       </div>
@@ -158,6 +159,8 @@ export function AdminLayoutClient({ adminUsername, adminRole, children }: AdminL
       <style>{`
         @media (max-width: 768px) {
           .admin-hamburger { display: flex !important; }
+          .admin-topbar { padding: 0 12px 0 56px !important; }
+          .admin-main-content { padding: 16px 14px !important; }
         }
         @media (min-width: 769px) {
           .admin-topbar-name { display: inline !important; }

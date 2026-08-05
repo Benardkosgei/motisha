@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * POST /api/auth/session-token
@@ -99,7 +100,26 @@ export async function GET(request: NextRequest) {
 
     // Check if fingerprints match
     const valid = profile.active_device_fingerprint === clientFingerprint;
-    return NextResponse.json({ valid });
+
+    if (!valid) {
+      // Log the mismatch for security monitoring — use service role so it works regardless of RLS
+      supabaseAdmin
+        .from('admin_audit_log')
+        .insert({
+          admin_id: user.id,
+          action: 'device_mismatch',
+          details: {
+            reason: 'Client fingerprint does not match stored fingerprint',
+            client_fp_prefix: clientFingerprint.slice(0, 8),
+            stored_fp_prefix: (profile.active_device_fingerprint ?? '').slice(0, 8),
+          },
+        })
+        .then(({ error }) => {
+          if (error) console.warn('[session-token/verify] Failed to log mismatch:', error.message);
+        });
+    }
+
+    return NextResponse.json({ valid, reason: valid ? 'authorized' : 'device_mismatch' });
   } catch (error) {
     console.error('[session-token/verify] error:', error);
     return NextResponse.json({ valid: false }, { status: 200 });

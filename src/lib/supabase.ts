@@ -75,6 +75,8 @@ export interface Content {
   status?: string
   publish_at?: string | null
   published_at?: string | null
+  /** free | pro | school */
+  access_tier?: 'free' | 'pro' | 'school'
   // Course-expansion fields (migration 012)
   thumbnail_url?: string | null
   trailer_url?: string | null

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageContent } from '@/lib/admin-rbac';
+import { ServiceCreateSchema, validateBody } from '@/lib/validation-schemas';
 
 /**
  * GET /api/admin/services
@@ -42,12 +43,14 @@ export async function POST(request: NextRequest) {
   if (!canManageContent(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const body = await request.json();
-    const { icon, title, color, gradient, tagline, has_submenu, sort_order, active } = body;
+    const rawBody = await request.json();
 
-    if (!title?.trim()) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    const validation = validateBody(ServiceCreateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
     }
+
+    const { icon, title, color, gradient, tagline, has_submenu, sort_order, active } = validation.data;
 
     const { data, error } = await supabaseAdmin
       .from('service_menus')

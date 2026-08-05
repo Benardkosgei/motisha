@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageBookings } from '@/lib/admin-rbac';
 import { logAdminAction } from '@/lib/audit-log';
+import { BookingUpdateStatusSchema, validateBody } from '@/lib/validation-schemas';
 
 const VALID_STATUSES = ['pending', 'confirmed', 'deposit_paid', 'completed', 'cancelled', 'rejected'];
 
@@ -42,38 +43,38 @@ export async function PATCH(
   if (!canManageBookings(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
     const updates: Record<string, unknown> = {};
 
-    if (body.status !== undefined) {
-      if (!VALID_STATUSES.includes(body.status)) {
+    if (rawBody.status !== undefined) {
+      if (!VALID_STATUSES.includes(rawBody.status)) {
         return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 });
       }
-      updates.status = body.status;
+      updates.status = rawBody.status;
     }
 
-    if (body.admin_notes !== undefined) updates.admin_notes = body.admin_notes;
+    if (rawBody.admin_notes !== undefined) updates.admin_notes = rawBody.admin_notes;
 
     // Deposit recording — allows admin to manually record a bank-transfer deposit
-    if (body.deposit_amount !== undefined) {
-      const amt = Number(body.deposit_amount);
+    if (rawBody.deposit_amount !== undefined) {
+      const amt = Number(rawBody.deposit_amount);
       if (isNaN(amt) || amt < 0) {
         return NextResponse.json({ error: 'deposit_amount must be a non-negative number' }, { status: 400 });
       }
       updates.deposit_amount = amt;
     }
-    if (body.deposit_paid_at !== undefined) {
-      updates.deposit_paid_at = body.deposit_paid_at || null;
+    if (rawBody.deposit_paid_at !== undefined) {
+      updates.deposit_paid_at = rawBody.deposit_paid_at || null;
     }
-    if (body.payment_method !== undefined) {
+    if (rawBody.payment_method !== undefined) {
       const validMethods = ['mpesa', 'bank', 'card'];
-      if (body.payment_method !== null && !validMethods.includes(body.payment_method)) {
+      if (rawBody.payment_method !== null && !validMethods.includes(rawBody.payment_method)) {
         return NextResponse.json({ error: `payment_method must be one of: ${validMethods.join(', ')}` }, { status: 400 });
       }
-      updates.payment_method = body.payment_method;
+      updates.payment_method = rawBody.payment_method;
     }
-    if (body.mpesa_receipt !== undefined) {
-      updates.mpesa_receipt = body.mpesa_receipt || null;
+    if (rawBody.mpesa_receipt !== undefined) {
+      updates.mpesa_receipt = rawBody.mpesa_receipt || null;
     }
 
     if (Object.keys(updates).length === 0) {

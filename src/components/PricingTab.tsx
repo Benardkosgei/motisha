@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { C } from './Logo';
 import { useAuth } from '@/lib/auth-context';
 import type { Profile } from '@/lib/auth-context';
@@ -75,30 +75,114 @@ interface PaymentModalProps {
 
 function PaymentModal({ pkg, billing, amount, onClose, profile, onPaymentSuccess }: PaymentModalProps) {
   const { bank_details, contact_info } = usePublicSettings();
+  const { session } = useAuth();
   const [method, setMethod] = useState<'mpesa' | 'bank' | null>(null);
   const [phone, setPhone] = useState(profile?.phone?.replace('+254', '0') ?? '');
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'waiting_pin' | 'polling' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [checkoutId, setCheckoutId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Keep a ref to the latest session so the polling closure always uses a fresh token
+  // (Supabase auto-refreshes the token; the closure would capture a stale one otherwise)
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  // Stop polling on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  /**
+   * Polls /api/payments/mpesa/stk-status every 4 seconds until the payment
+   * completes, fails, or times out (after 5 minutes / ~75 polls).
+   * Uses sessionRef so it always has the latest (auto-refreshed) access token.
+   */
+  const startStatusPolling = (cid: string) => {
+    let polls = 0;
+    const MAX_POLLS = 75; // ~5 minutes at 4s intervals
+
+    pollRef.current = setInterval(async () => {
+      polls++;
+      const currentToken = sessionRef.current?.access_token;
+      if (!currentToken) {
+        // Session expired — abort polling
+        stopPolling();
+        setStatus('error');
+        setMessage('Session expired. Please refresh the page to check your payment status.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/payments/mpesa/stk-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+          },
+          body: JSON.stringify({ checkoutRequestId: cid, userId: profile?.id }),
+        });
+        const data = await res.json();
+
+        if (data.status === 'completed') {
+          stopPolling();
+          setStatus('success');
+          setMessage('✅ Payment confirmed! Your account is being activated…');
+          onPaymentSuccess?.();
+        } else if (data.status === 'failed' || data.status === 'not_found') {
+          stopPolling();
+          setStatus('error');
+          setMessage(
+            data.reason === 'timeout'
+              ? '⏱ Payment timed out. You did not enter your PIN in time. Please try again.'
+              : '❌ Payment was not completed. Please try again.'
+          );
+        } else if (polls >= MAX_POLLS) {
+          stopPolling();
+          setStatus('error');
+          setMessage('⏱ Payment confirmation is taking too long. If you completed payment, your account will update shortly. Otherwise, please try again.');
+        }
+      } catch {
+        // Network error — keep polling until MAX_POLLS
+        if (polls >= MAX_POLLS) {
+          stopPolling();
+          setStatus('error');
+          setMessage('Could not verify payment status. If you paid, your account will update automatically. Contact support if it does not.');
+        }
+      }
+    }, 4000);
+  };
 
   const handleMpesa = async () => {
     if (!phone.trim()) { setMessage('Please enter your M-Pesa phone number.'); return; }
+    const currentToken = sessionRef.current?.access_token;
+    if (!currentToken) {
+      setMessage('Session expired. Please refresh the page and try again.');
+      return;
+    }
+
     setLoading(true);
-    setStatus('pending');
-    setMessage('Sending STK push to your phone…');
+    setStatus('waiting_pin');
+    setMessage('Sending payment request to your phone…');
 
     try {
       const res = await fetch('/api/payments/mpesa/stk-push', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentToken}`,
+        },
         body: JSON.stringify({ phone, amount, package: pkg, billing, userId: profile?.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment initiation failed');
-      setStatus('success');
-      setMessage('✅ Check your phone and enter your M-Pesa PIN to complete payment. Your account will be activated automatically.');
-      // Notify parent to refresh the profile once payment is confirmed
-      onPaymentSuccess?.();
+
+      const cid = data.checkoutRequestId as string;
+      setCheckoutId(cid);
+      setStatus('polling');
+      setMessage('📱 Check your phone and enter your M-Pesa PIN to complete payment.');
+      startStatusPolling(cid);
     } catch (err) {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Payment failed. Please try again.');
@@ -206,13 +290,20 @@ function PaymentModal({ pkg, billing, amount, onClose, profile, onPaymentSuccess
         {method === 'mpesa' && status !== 'idle' && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>
-              {status === 'pending' ? '⏳' : status === 'success' ? '✅' : '❌'}
+              {status === 'polling' || status === 'waiting_pin' ? '⏳' : status === 'success' ? '✅' : '❌'}
             </div>
             <p style={{ color: status === 'error' ? C.danger : status === 'success' ? C.success : C.white, fontSize: '0.88rem', lineHeight: 1.6 }}>
               {message}
             </p>
+            {/* Live polling indicator */}
+            {status === 'polling' && (
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.gray, fontSize: '0.76rem' }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: C.mustard, animation: 'pulse-dot 1.2s ease-in-out infinite' }} />
+                Waiting for payment confirmation…
+              </div>
+            )}
             {status === 'error' && (
-              <button onClick={() => { setStatus('idle'); setMessage(''); }} style={{ marginTop: 16, padding: '10px 24px', borderRadius: 8, background: `${C.teal}20`, color: C.teal, border: `1px solid ${C.teal}30`, cursor: 'pointer', fontWeight: 700 }}>
+              <button onClick={() => { setStatus('idle'); setMessage(''); setCheckoutId(null); stopPolling(); }} style={{ marginTop: 16, padding: '10px 24px', borderRadius: 8, background: `${C.teal}20`, color: C.teal, border: `1px solid ${C.teal}30`, cursor: 'pointer', fontWeight: 700 }}>
                 Try Again
               </button>
             )}
@@ -259,7 +350,7 @@ function PaymentModal({ pkg, billing, amount, onClose, profile, onPaymentSuccess
 }
 
 export function PricingTab({ profile, onNav }: PricingTabProps) {
-  const { refreshProfile } = useAuth();
+  const { refreshProfile, session } = useAuth();
   const currentTier = profile?.subscription_tier ?? 'free';
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
   const [payingFor, setPayingFor] = useState<{ pkg: PackageType; billing: BillingPeriod; amount: number } | null>(null);
@@ -268,30 +359,68 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
   const [prices, setPrices] = useState<Record<PackageType, Record<BillingPeriod, number>>>(FALLBACK_PRICES);
   const [features, setFeatures] = useState<Record<PackageType, string[]>>(FALLBACK_FEATURES);
   const [plansLoading, setPlansLoading] = useState(true);
+  // Store raw plan rows so we can re-derive features when billing changes
+  const [allPlans, setAllPlans] = useState<DbPlan[]>([]);
+
+  // Re-derive features whenever billing toggle or raw plan data changes
+  useEffect(() => {
+    if (!allPlans.length) return;
+    const newFeatures = { ...FALLBACK_FEATURES };
+    const featuresByBilling: Record<PackageType, Partial<Record<BillingPeriod, string[]>>> = {
+      individual: {},
+      admin: {},
+    };
+    for (const plan of allPlans) {
+      if (plan.features?.length) {
+        featuresByBilling[plan.package][plan.billing] = plan.features;
+      }
+    }
+    for (const pkg of ['individual', 'admin'] as PackageType[]) {
+      const byBilling = featuresByBilling[pkg];
+      const best =
+        byBilling[billing] ??
+        byBilling['monthly'] ??
+        Object.values(byBilling).find(Boolean);
+      if (best) newFeatures[pkg] = best;
+    }
+    setFeatures(newFeatures);
+  }, [billing, allPlans]);
 
   useEffect(() => {
-    fetch('/api/public/plans')
+    fetch('/api/public/plans', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then((data: { plans?: DbPlan[] } | null) => {
         if (!data?.plans?.length) return;
         const newPrices = { ...FALLBACK_PRICES };
-        const newFeatures = { ...FALLBACK_FEATURES };
         for (const plan of data.plans) {
           if (!newPrices[plan.package]) continue;
           newPrices[plan.package] = { ...newPrices[plan.package], [plan.billing]: plan.price_kes };
-          // Use DB features for the monthly plan as the canonical feature list
-          if (plan.billing === 'monthly' && plan.features?.length) {
-            newFeatures[plan.package] = plan.features;
-          }
         }
         setPrices(newPrices);
-        setFeatures(newFeatures);
+        setAllPlans(data.plans);
       })
       .catch(() => { /* keep fallback */ })
       .finally(() => setPlansLoading(false));
   }, []);
 
-  const isSubscribed = currentTier === 'pro' || currentTier === 'school';
+  // Determine subscribe button label and disabled state for each plan card
+  function getPlanButtonLabel(pkg: PackageType): string {
+    if (pkg === 'individual') {
+      if (currentTier === 'pro') return 'Current Plan';
+      if (currentTier === 'school') return '⬇ Switch to Individual';
+    }
+    if (pkg === 'admin') {
+      if (currentTier === 'school') return 'Current Plan';
+      if (currentTier === 'pro') return '⬆ Upgrade to Admin';
+    }
+    return '📱 Subscribe via M-Pesa';
+  }
+
+  function isPlanButtonDisabled(pkg: PackageType): boolean {
+    if (pkg === 'individual' && currentTier === 'pro') return true;
+    if (pkg === 'admin' && currentTier === 'school') return true;
+    return false;
+  }
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -362,17 +491,17 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
               ))}
             </ul>
             <button
-              onClick={() => !isSubscribed && setPayingFor({ pkg: 'individual', billing, amount: prices.individual[billing] })}
-              disabled={currentTier === 'pro'}
+              onClick={() => !isPlanButtonDisabled('individual') && setPayingFor({ pkg: 'individual', billing, amount: prices.individual[billing] })}
+              disabled={isPlanButtonDisabled('individual')}
               style={{
                 width: '100%', padding: '12px', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem',
-                background: currentTier === 'pro' ? 'transparent' : `linear-gradient(135deg, ${C.teal}, ${C.tealDark})`,
-                color: currentTier === 'pro' ? C.grayDark : '#fff',
-                border: currentTier === 'pro' ? `1px solid ${C.grayDark}40` : 'none',
-                cursor: currentTier === 'pro' ? 'default' : 'pointer',
+                background: isPlanButtonDisabled('individual') ? 'transparent' : `linear-gradient(135deg, ${C.teal}, ${C.tealDark})`,
+                color: isPlanButtonDisabled('individual') ? C.grayDark : '#fff',
+                border: isPlanButtonDisabled('individual') ? `1px solid ${C.grayDark}40` : 'none',
+                cursor: isPlanButtonDisabled('individual') ? 'default' : 'pointer',
               }}
             >
-              {currentTier === 'pro' ? 'Current Plan' : '📱 Subscribe via M-Pesa'}
+              {getPlanButtonLabel('individual')}
             </button>
           </div>
         </div>
@@ -415,17 +544,17 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
               ))}
             </ul>
             <button
-              onClick={() => currentTier !== 'school' && setPayingFor({ pkg: 'admin', billing, amount: prices.admin[billing] })}
-              disabled={currentTier === 'school'}
+              onClick={() => !isPlanButtonDisabled('admin') && setPayingFor({ pkg: 'admin', billing, amount: prices.admin[billing] })}
+              disabled={isPlanButtonDisabled('admin')}
               style={{
                 width: '100%', padding: '12px', borderRadius: 10, fontWeight: 800, fontSize: '0.85rem',
-                background: currentTier === 'school' ? 'transparent' : `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`,
-                color: currentTier === 'school' ? C.grayDark : C.navy,
-                border: currentTier === 'school' ? `1px solid ${C.grayDark}40` : 'none',
-                cursor: currentTier === 'school' ? 'default' : 'pointer',
+                background: isPlanButtonDisabled('admin') ? 'transparent' : `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`,
+                color: isPlanButtonDisabled('admin') ? C.grayDark : C.navy,
+                border: isPlanButtonDisabled('admin') ? `1px solid ${C.grayDark}40` : 'none',
+                cursor: isPlanButtonDisabled('admin') ? 'default' : 'pointer',
               }}
             >
-              {currentTier === 'school' ? 'Current Plan' : '📱 Subscribe via M-Pesa'}
+              {getPlanButtonLabel('admin')}
             </button>
           </div>
         </div>
@@ -450,17 +579,25 @@ export function PricingTab({ profile, onNav }: PricingTabProps) {
           onClose={() => setPayingFor(null)}
           onPaymentSuccess={() => {
             // Poll for profile update — the M-Pesa callback updates the DB
-            // asynchronously, so we retry a few times with a delay.
+            // asynchronously. The modal's own status polling handles the
+            // completion signal; here we just ensure the profile refreshes.
             let attempts = 0;
             const poll = setInterval(() => {
               refreshProfile().finally(() => {
                 attempts++;
-                if (attempts >= 6) clearInterval(poll); // stop after ~30s
+                if (attempts >= 8) clearInterval(poll); // stop after ~40s
               });
             }, 5000);
           }}
         />
       )}
+
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.4; transform: scale(1.4); }
+        }
+      `}</style>
     </div>
   );
 }

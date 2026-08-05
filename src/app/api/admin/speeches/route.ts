@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageContent } from '@/lib/admin-rbac';
+import { ArticleCreateSchema, validateBody } from '@/lib/validation-schemas';
 
 /**
  * GET /api/admin/speeches
@@ -53,19 +54,20 @@ export async function POST(request: NextRequest) {
   if (!canManageContent(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const body = await request.json();
-    const { title, description, icon, premium, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, slide_expires_at, publish_at, published_at, status } = body;
+    const rawBody = await request.json();
 
-    // Validate required fields
-    if (!title || typeof title !== 'string' || title.trim() === '') {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+    const validation = validateBody(ArticleCreateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
     }
 
+    const body = validation.data;
+    const { title, description, icon, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, slide_expires_at, publish_at, status } = body;
+    const premium = (rawBody as Record<string, unknown>).premium === true;
+    const published_at = (rawBody as Record<string, unknown>).published_at as string | undefined;
+
     // Prepare insert data
-    const insertData: any = {
+    const insertData: Record<string, unknown> = {
       type: 'Speech',
       title: title.trim(),
       description: description || null,

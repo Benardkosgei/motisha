@@ -1,9 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManagePlans } from '@/lib/admin-rbac';
+import { z, validateBody } from '@/lib/validation-schemas';
+
+// ─── Schema ───────────────────────────────────────────────────────────────────
+
+const PlanUpdateSchema = z.object({
+  price_kes: z
+    .number({ invalid_type_error: 'price_kes must be a number' })
+    .int('price_kes must be an integer')
+    .min(0, 'Price must be a non-negative number')
+    .optional(),
+
+  max_accounts: z
+    .number({ invalid_type_error: 'max_accounts must be a number' })
+    .int('max_accounts must be an integer')
+    .min(1, 'Max accounts must be at least 1')
+    .optional(),
+
+  features: z
+    .array(
+      z.string()
+        .min(1, 'Feature text cannot be empty')
+        .max(200, 'Feature text must be under 200 characters')
+        .transform(s => s.trim())
+    )
+    .max(20, 'A plan can have at most 20 features')
+    .optional(),
+}).refine(
+  data => Object.keys(data).length > 0,
+  { message: 'No valid fields to update' }
+);
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 /**
  * PATCH /api/admin/plans/[tier]
+ *
+ * The route segment is named [tier] for URL readability, but the value
+ * passed is always the plan's UUID (id). This is intentional — the admin
+ * UI identifies plans by id to avoid ambiguity between "individual:monthly"
+ * and so on.
  */
 export async function PATCH(
   request: NextRequest,
@@ -13,42 +50,32 @@ export async function PATCH(
   if (!auth.ok) return auth.response;
   if (!canManagePlans(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+  // The param value is the plan's UUID, despite the folder being named [tier]
+  const planId = params.tier;
+
+  // Basic UUID guard — prevents passing arbitrary strings like "free" or "../"
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(planId)) {
+    return NextResponse.json({ error: 'Invalid plan id' }, { status: 400 });
+  }
+
   try {
-    const id = params.tier;
-    const body = await request.json();
-    const updateData: Record<string, unknown> = {};
+    const rawBody = await request.json();
 
-    if (body.price_kes !== undefined) {
-      const price = Number(body.price_kes);
-      if (isNaN(price) || price < 0) {
-        return NextResponse.json({ error: 'Price must be a non-negative number' }, { status: 400 });
-      }
-      updateData.price_kes = price;
+    const validation = validateBody(PlanUpdateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.message, details: validation.error.details },
+        { status: 400 }
+      );
     }
 
-    if (body.max_accounts !== undefined) {
-      const max = Number(body.max_accounts);
-      if (isNaN(max) || max < 1) {
-        return NextResponse.json({ error: 'Max accounts must be at least 1' }, { status: 400 });
-      }
-      updateData.max_accounts = max;
-    }
-
-    if (body.features !== undefined) {
-      if (!Array.isArray(body.features)) {
-        return NextResponse.json({ error: 'Features must be an array' }, { status: 400 });
-      }
-      updateData.features = body.features;
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
-    }
+    const updateData = validation.data as Record<string, unknown>;
 
     const { data, error } = await supabaseAdmin
       .from('plans')
       .update(updateData)
-      .eq('id', id)
+      .eq('id', planId)
       .select()
       .single();
 

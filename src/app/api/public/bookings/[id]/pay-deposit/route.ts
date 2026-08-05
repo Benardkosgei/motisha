@@ -1,89 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createClient } from '@supabase/supabase-js';
+import {
+  loadMpesaConfig,
+  getDarajaToken,
+  getDarajaBaseUrl,
+  formatMpesaPhone,
+  getDarajaTimestamp,
+  buildStkPassword,
+  getTransactionType,
+} from '@/lib/mpesa-helpers';
 
-// ── Shared M-Pesa helpers (same pattern as stk-push/route.ts) ────────────────
+// ─── Simple in-process rate limiter ──────────────────────────────────────────
+// Max 3 deposit payment attempts per user per minute (same policy as subscriptions).
 
-interface MpesaConfig {
-  consumerKey: string;
-  consumerSecret: string;
-  shortcode: string;
-  passkey: string;
-  callbackUrl: string;
-  env: string;
-}
+const WINDOW_MS = 60_000;
+const MAX_PER_WINDOW = 3;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-async function loadMpesaConfig(): Promise<MpesaConfig> {
-  const { data } = await supabaseAdmin
-    .from('system_settings')
-    .select('value')
-    .eq('key', 'mpesa_config')
-    .single();
-
-  const db = (data?.value ?? {}) as Record<string, string>;
-
-  const consumerKey    = db.consumer_key    || process.env.MPESA_CONSUMER_KEY    || '';
-  const consumerSecret = db.consumer_secret || process.env.MPESA_CONSUMER_SECRET || '';
-  const shortcode      = db.shortcode       || process.env.MPESA_SHORTCODE       || '';
-  const passkey        = db.passkey         || process.env.MPESA_PASSKEY         || '';
-  const callbackUrl    = db.callback_url    || process.env.MPESA_CALLBACK_URL    || '';
-  const env            = db.env             || process.env.MPESA_ENV             || 'sandbox';
-
-  if (!consumerKey || !consumerSecret) throw new Error('M-Pesa consumer key/secret not configured.');
-  if (!shortcode || !passkey) throw new Error('M-Pesa shortcode or passkey not configured.');
-  if (!callbackUrl) throw new Error('M-Pesa callback URL not configured.');
-
-  return { consumerKey, consumerSecret, shortcode, passkey, callbackUrl, env };
-}
-
-async function getDarajaToken(config: MpesaConfig): Promise<string> {
-  const credentials = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
-  const baseUrl = config.env === 'production'
-    ? 'https://api.safaricom.co.ke'
-    : 'https://sandbox.safaricom.co.ke';
-  const res = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${credentials}` },
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error('Failed to get Daraja token');
-  const data = await res.json();
-  return data.access_token as string;
-}
-
-function formatPhone(phone: string): string {
-  let p = phone.trim().replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-  if (p.startsWith('+')) p = p.slice(1);
-  if (p.startsWith('07') || p.startsWith('01')) p = '254' + p.slice(1);
-  if (!p.startsWith('254')) p = '254' + p;
-  return p;
-}
-
-function getTimestamp(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
+  }
+  if (entry.count >= MAX_PER_WINDOW) return true;
+  entry.count += 1;
+  return false;
 }
 
 /**
  * POST /api/public/bookings/[id]/pay-deposit
+ *
  * Initiates an M-Pesa STK push for the 50% booking deposit.
+ *
  * Body: { phone: string, payment_method: 'mpesa' | 'bank' }
  *
- * NOTE: Requires the booking to be in 'confirmed' status.
- * Auth check: verifies the requester matches the booking user_id.
+ * Authentication: Bearer Supabase access token (Authorization header).
+ *   The authenticated user must own the booking.
+ *
+ * Requirements:
+ *   - Booking must be in 'confirmed' status.
+ *   - Currency must be KES (M-Pesa does not support USD).
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const body = await req.json();
-    const { phone, payment_method, userId } = body as {
-      phone: string;
-      payment_method: 'mpesa' | 'bank';
-      userId?: string;
-    };
+    // ── Authenticate caller ───────────────────────────────────────────────────
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized — missing session token' }, { status: 401 });
+    }
 
-    // Fetch the booking
+    const accessToken = authHeader.slice(7);
+    const supabaseClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized — invalid or expired session' }, { status: 401 });
+    }
+
+    // ── Fetch and authorise booking ───────────────────────────────────────────
     const { data: booking, error: fetchError } = await supabaseAdmin
       .from('bookings')
       .select('id, user_id, service_name, package_label, fee, currency, deposit_amount, status')
@@ -94,9 +78,9 @@ export async function POST(
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    // Auth check — only the booking owner can initiate payment
-    if (userId && booking.user_id && userId !== booking.user_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    // Only the booking owner can initiate payment — enforce via session, not just body
+    if (booking.user_id && booking.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden — this booking does not belong to your account' }, { status: 403 });
     }
 
     if (booking.status !== 'confirmed') {
@@ -113,9 +97,23 @@ export async function POST(
       );
     }
 
+    // ── Rate limiting ─────────────────────────────────────────────────────────
+    if (isRateLimited(user.id)) {
+      return NextResponse.json(
+        { error: 'Too many payment requests. Please wait a minute before trying again.' },
+        { status: 429 }
+      );
+    }
+
     const depositAmount = booking.deposit_amount ?? Math.round(booking.fee * 0.5);
 
-    // Bank transfer — just acknowledge, no STK push
+    const body = await req.json();
+    const { phone, payment_method } = body as {
+      phone?: string;
+      payment_method: 'mpesa' | 'bank';
+    };
+
+    // ── Bank transfer — acknowledge only ─────────────────────────────────────
     if (payment_method === 'bank') {
       return NextResponse.json({
         success: true,
@@ -125,31 +123,41 @@ export async function POST(
       });
     }
 
-    // M-Pesa STK push
-    if (!phone) {
+    // ── M-Pesa STK push ───────────────────────────────────────────────────────
+    if (!phone?.trim()) {
       return NextResponse.json({ error: 'Phone number is required for M-Pesa payment' }, { status: 400 });
     }
 
-    // Load config from DB (respects admin-configured credentials)
-    const mpesaConfig = await loadMpesaConfig();
-    const { shortcode, passkey, callbackUrl, env } = mpesaConfig;
-    const baseUrl = env === 'production'
-      ? 'https://api.safaricom.co.ke'
-      : 'https://sandbox.safaricom.co.ke';
+    const mpesaConfig  = await loadMpesaConfig();
+    const { shortcode, tillNumber, passkey, callbackUrl } = mpesaConfig;
+    const baseUrl        = getDarajaBaseUrl(mpesaConfig);
+    const token          = await getDarajaToken(mpesaConfig);
+    const timestamp      = getDarajaTimestamp();
+    const password       = buildStkPassword(shortcode, passkey, timestamp);
+    const transactionType = getTransactionType(mpesaConfig); // respects till vs paybill
+    const formattedPhone  = formatMpesaPhone(phone);
 
-    const token = await getDarajaToken(mpesaConfig);
-    const timestamp = getTimestamp();
-    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
-    const formattedPhone = formatPhone(phone);
+    // For Till: PartyB = till number. For Paybill: PartyB = shortcode.
+    const partyB = mpesaConfig.shortcodeType === 'till' ? tillNumber : shortcode;
+
+    console.info('[bookings/pay-deposit] initiating STK push:', {
+      bookingId: params.id,
+      env: mpesaConfig.env,
+      shortcode,
+      partyB,
+      transactionType,
+      formattedPhone,
+      depositAmount,
+    });
 
     const stkPayload = {
       BusinessShortCode: shortcode,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
+      TransactionType: transactionType,
       Amount: depositAmount,
       PartyA: formattedPhone,
-      PartyB: shortcode,
+      PartyB: partyB,
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: `BOOKING-${params.id.slice(0, 8).toUpperCase()}`,
@@ -158,11 +166,15 @@ export async function POST(
 
     const stkRes = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(stkPayload),
     });
 
     const stkData = await stkRes.json();
+    console.info('[bookings/pay-deposit] Daraja response:', stkData);
 
     if (!stkRes.ok || stkData.ResponseCode !== '0') {
       console.error('[bookings/pay-deposit] STK push failed:', stkData);
@@ -174,9 +186,17 @@ export async function POST(
 
     const checkoutId = stkData.CheckoutRequestID as string;
 
+    // Store pending booking payment record — includes timestamp for cleanup
     await supabaseAdmin.from('system_settings').upsert({
       key: `mpesa_booking_${checkoutId}`,
-      value: { checkoutId, bookingId: params.id, phone: formattedPhone, amount: depositAmount, timestamp: new Date().toISOString() },
+      value: {
+        checkoutId,
+        bookingId: params.id,
+        phone: formattedPhone,
+        amount: depositAmount,
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      },
     }, { onConflict: 'key' });
 
     await supabaseAdmin

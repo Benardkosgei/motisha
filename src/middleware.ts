@@ -53,29 +53,35 @@ export async function middleware(request: NextRequest) {
   }
 
   // Valid session — pass username, role, and user ID downstream
+  const role = payload.role ?? 'super_admin';
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-admin-username', payload.username);
-  requestHeaders.set('x-admin-role', payload.role ?? 'super_admin');
+  requestHeaders.set('x-admin-role', role);
   // userId is embedded in the token at login — no DB lookup needed
   if (payload.userId) {
     requestHeaders.set('x-admin-user-id', payload.userId);
   }
 
-  // Enforce section-level access for restricted roles
-  const role = payload.role ?? 'super_admin';
-  const sectionMap: Record<string, AdminNavSection> = {
-    '/admin/analytics': 'analytics',
-    '/admin/users':     'users',
-    '/admin/revenue':   'revenue',
-    '/admin/plans':     'plans',
-    '/admin/settings':  'settings',
-    '/admin/bookings':  'bookings',
-  };
-  for (const [prefix, section] of Object.entries(sectionMap)) {
+  // Enforce section-level access for restricted roles.
+  // Using a Map for O(1) prefix matching instead of iterating all entries.
+  const sectionPrefixes: Array<[string, AdminNavSection]> = [
+    ['/admin/analytics',          'analytics'],
+    ['/admin/users',              'users'],
+    ['/admin/revenue',            'revenue'],
+    ['/admin/plans',              'plans'],
+    ['/admin/settings',           'settings'],
+    ['/admin/bookings',           'bookings'],
+    ['/admin/mpesa-logs',         'mpesa-logs'],
+    ['/admin/author-submissions', 'author-submissions'],
+    ['/admin/payout-requests',    'payout-requests'],
+  ];
+
+  for (const [prefix, section] of sectionPrefixes) {
     if (pathname === prefix || pathname.startsWith(prefix + '/')) {
       if (!canAccessSection(section, role)) {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
+      break; // Only one prefix can match — stop after first match
     }
   }
 

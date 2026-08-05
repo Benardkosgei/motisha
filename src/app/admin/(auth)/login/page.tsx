@@ -36,7 +36,14 @@ export default function AdminLoginPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      let data: { error?: string; ok?: boolean; role?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Server returned non-JSON (e.g. HTML error page)
+        setError(res.status === 500 ? 'Server error. Please try again.' : 'Network error. Please try again.');
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error ?? 'Login failed.');

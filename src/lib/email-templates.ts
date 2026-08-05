@@ -357,6 +357,90 @@ export function bookingAdminNotificationEmail(data: BookingConfirmationEmailData
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface SubscriptionExpiringEmailData {
+  name: string;
+  daysLeft: number;
+  packageLabel: string;
+  billingLabel: string;
+  expiresAt: string; // ISO date string
+  appUrl: string;
+  systemName?: string;
+  logoUrl?: string | null;
+}
+
+export function subscriptionExpiringEmail(data: SubscriptionExpiringEmailData): { subject: string; html: string } {
+  const sn = data.systemName ?? 'Motisha';
+  const expires = new Date(data.expiresAt).toLocaleDateString('en-KE', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Nairobi',
+  });
+  const html = layout(`
+    ${heading(`Your subscription expires in ${data.daysLeft} day${data.daysLeft !== 1 ? 's' : ''} ⚠️`)}
+    ${subheading(`Renew before ${expires} to keep uninterrupted access.`)}
+
+    <p style="font-size:0.88rem;color:#94A3B8;line-height:1.7;margin:0 0 20px;">
+      Hi ${data.name}, your <strong style="color:#F1F5F9;">${data.packageLabel} ${data.billingLabel}</strong>
+      subscription on ${sn} is expiring soon.
+      Renew now to avoid losing access to speeches, newsletters, and the course library.
+    </p>
+
+    ${infoTable([
+      ['Plan', `${data.packageLabel} · ${data.billingLabel}`],
+      ['Expires On', expires],
+      ['Days Left', String(data.daysLeft)],
+    ])}
+
+    ${ctaButton('Renew Subscription', `${data.appUrl}/?tab=pricing`, '#F5A623')}
+
+    ${divider()}
+    <p style="font-size:0.76rem;color:#475569;margin:0;line-height:1.6;">
+      Pay via M-Pesa or bank transfer. Activation is instant for M-Pesa payments.
+    </p>
+  `, { systemName: sn, logoUrl: data.logoUrl });
+
+  return {
+    subject: `⚠️ Your ${sn} subscription expires in ${data.daysLeft} day${data.daysLeft !== 1 ? 's' : ''} — renew now`,
+    html,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SubscriptionExpiredEmailData {
+  name: string;
+  packageLabel: string;
+  appUrl: string;
+  systemName?: string;
+  logoUrl?: string | null;
+}
+
+export function subscriptionExpiredEmail(data: SubscriptionExpiredEmailData): { subject: string; html: string } {
+  const sn = data.systemName ?? 'Motisha';
+  const html = layout(`
+    ${heading('Your subscription has expired 🔒')}
+    ${subheading('Resubscribe to restore full access.')}
+
+    <p style="font-size:0.88rem;color:#94A3B8;line-height:1.7;margin:0 0 20px;">
+      Hi ${data.name}, your <strong style="color:#F1F5F9;">${data.packageLabel}</strong> subscription
+      on ${sn} has expired. Your account is still active — resubscribe to restore
+      access to speeches, newsletters, resources, and the full course library.
+    </p>
+
+    ${ctaButton('Resubscribe Now', `${data.appUrl}/?tab=pricing`, '#EF4444')}
+
+    ${divider()}
+    <p style="font-size:0.76rem;color:#475569;margin:0;line-height:1.6;">
+      Plans start from KES 1,500/month. Instant activation via M-Pesa.
+    </p>
+  `, { systemName: sn, logoUrl: data.logoUrl });
+
+  return {
+    subject: `Your ${sn} subscription has expired — resubscribe to restore access`,
+    html,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface TestEmailData {
   recipientEmail: string;
   systemName?: string;

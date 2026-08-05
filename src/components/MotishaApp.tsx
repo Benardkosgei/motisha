@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bell, TrendingUp } from 'lucide-react';
 import { Sidebar } from './Sidebar';
@@ -61,12 +61,21 @@ export function MotishaApp() {
   const searchParams = useSearchParams();
 
   // Derive active tab from URL — ?tab=pricing etc.
-  const nav: NavItem = resolveTab(searchParams.get('tab'));
+  const urlTab: NavItem = resolveTab(searchParams.get('tab'));
+
+  // Local state drives the UI immediately — no waiting for router
+  const [nav, setNav] = useState<NavItem>(urlTab);
+  const [, startTransition] = useTransition();
+
+  // Keep local state in sync if the URL changes externally (back/forward, deep link)
+  useEffect(() => {
+    setNav(urlTab);
+  }, [urlTab]);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [sessionInvalidated, setSessionInvalidated] = useState(false);
   // Track which tabs have been mounted at least once (for lazy loading)
-  const [visited, setVisited] = useState<Set<NavItem>>(() => new Set([resolveTab(null)]));
+  const [visited, setVisited] = useState<Set<NavItem>>(() => new Set([urlTab]));
 
   const unread = notifications.filter(n => !n.read).length;
 
@@ -126,14 +135,14 @@ export function MotishaApp() {
     }
   }, []);
 
-  // Mark the current tab as visited whenever the URL-derived nav changes
-  // This ensures lazy-loaded tabs mount correctly on direct links / back-forward
+  // Mark the current tab as visited whenever the URL changes externally
+  // (back/forward navigation, direct deep-link) so lazy tabs mount correctly
   useEffect(() => {
     setVisited(prev => {
-      if (prev.has(nav)) return prev;
-      return new Set(prev).add(nav);
+      if (prev.has(urlTab)) return prev;
+      return new Set(prev).add(urlTab);
     });
-  }, [nav]);
+  }, [urlTab]);
 
   const handleMarkRead = async () => {
     if (!session?.user) return;
@@ -219,10 +228,18 @@ export function MotishaApp() {
       tab = target.tab;
       itemId = target.id;
     }
-    // Build URL — include id when provided
-    const url = tab === 'home' ? '/' : itemId ? `/?tab=${tab}&id=${encodeURIComponent(itemId)}` : `/?tab=${tab}`;
-    router.push(url);
+
+    // Update local tab state IMMEDIATELY — no router wait, instant render
+    setNav(tab);
     setVisited(prev => new Set(prev).add(tab));
+
+    // Sync URL in the background so deep-links and back/forward work.
+    // startTransition marks this as non-urgent so React doesn't block the UI.
+    const url = tab === 'home' ? '/' : itemId ? `/?tab=${tab}&id=${encodeURIComponent(itemId)}` : `/?tab=${tab}`;
+    startTransition(() => {
+      // replace instead of push — avoids polluting browser history with every tab click
+      router.replace(url, { scroll: false });
+    });
   }
 
   function tabStyle(id: NavItem): React.CSSProperties {
@@ -251,18 +268,13 @@ export function MotishaApp() {
         }}>
           {/* Trial active banner */}
           {onTrial && (
-            <div style={{
-              padding: '8px 32px',
-              background: `linear-gradient(135deg, ${C.mustard}18, ${C.mustardDark}08)`,
-              borderBottom: `1px solid ${C.mustard}30`,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="motisha-banner motisha-banner--trial">
+              <div className="motisha-banner-content">
                 <span style={{ fontSize: '1rem' }}>⏳</span>
                 <span style={{ color: C.mustard, fontWeight: 700, fontSize: '0.8rem' }}>
                   Free Trial — {daysLeft} day{daysLeft !== 1 ? 's' : ''} left
                 </span>
-                <span style={{ color: C.gray, fontSize: '0.76rem' }}>
+                <span className="motisha-banner-detail" style={{ color: C.gray, fontSize: '0.76rem' }}>
                   · Speeches &amp; newsletters unlocked · Courses require a subscription
                 </span>
               </div>
@@ -277,19 +289,14 @@ export function MotishaApp() {
 
           {/* Session invalidated banner (another device login) */}
           {sessionInvalidated && (
-            <div style={{
-              padding: '8px 32px',
-              background: `linear-gradient(135deg, ${C.danger}18, ${C.danger}08)`,
-              borderBottom: `1px solid ${C.danger}30`,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="motisha-banner motisha-banner--danger">
+              <div className="motisha-banner-content">
                 <span style={{ fontSize: '1rem' }}>🔒</span>
                 <span style={{ color: C.danger, fontWeight: 700, fontSize: '0.8rem' }}>
-                  You've been logged in from a different device
+                  Logged in from a different device
                 </span>
-                <span style={{ color: C.gray, fontSize: '0.76rem' }}>
-                  · Only one device can be active at a time · Multiple browsers on the same device are allowed
+                <span className="motisha-banner-detail" style={{ color: C.gray, fontSize: '0.76rem' }}>
+                  · Only one device can be active at a time
                 </span>
               </div>
               <button
@@ -303,18 +310,13 @@ export function MotishaApp() {
 
           {/* Trial expired banner */}
           {trialHasExpired && (
-            <div style={{
-              padding: '8px 32px',
-              background: `linear-gradient(135deg, ${C.danger}18, ${C.danger}08)`,
-              borderBottom: `1px solid ${C.danger}30`,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="motisha-banner motisha-banner--danger">
+              <div className="motisha-banner-content">
                 <span style={{ fontSize: '1rem' }}>🔒</span>
                 <span style={{ color: C.danger, fontWeight: 700, fontSize: '0.8rem' }}>
                   Your free trial has ended
                 </span>
-                <span style={{ color: C.gray, fontSize: '0.76rem' }}>
+                <span className="motisha-banner-detail" style={{ color: C.gray, fontSize: '0.76rem' }}>
                   · Subscribe to keep accessing premium content
                 </span>
               </div>
@@ -328,18 +330,27 @@ export function MotishaApp() {
           )}
 
           {/* Title bar */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '14px 32px',
-            gap: 12,
-          }}>
-            <div>
-              <h1 style={{ color: 'var(--text)', fontWeight: 900, fontSize: '1.1rem', margin: 0, lineHeight: 1.3 }}>
+          <div
+            className="motisha-header-bar"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 32px',
+              gap: 12,
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <h1
+                className="motisha-header-title"
+                style={{ color: 'var(--text)', fontWeight: 900, fontSize: '1.1rem', margin: 0, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
                 {getPageTitle()}
               </h1>
-              <p style={{ color: 'var(--muted)', fontSize: '0.72rem', margin: 0, marginTop: 1 }}>
+              <p
+                className="motisha-header-sub"
+                style={{ color: 'var(--muted)', fontSize: '0.72rem', margin: 0, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
                 Motisha · {profile?.county ?? 'Kenya'} ·{' '}
                 {profile?.role === 'admin' ? 'Staff · ' : ''}
                 {profile?.subscription_tier === 'pro' ? 'Individual Plan' :
@@ -353,7 +364,7 @@ export function MotishaApp() {
               <button
                 onClick={() => handleNav('notifications')}
                 aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ''}`}
-                style={{ position: 'relative', width: 38, height: 38, borderRadius: 10, background: 'var(--surface-soft)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ position: 'relative', width: 38, height: 38, borderRadius: 10, background: 'var(--surface-soft)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
               >
                 <Bell size={17} color={C.gray} />
                 {unread > 0 && (
@@ -363,10 +374,11 @@ export function MotishaApp() {
               {profile?.subscription_tier === 'free' && (
                 <button
                   onClick={() => handleNav('pricing')}
+                  className="motisha-subscribe-btn"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, fontWeight: 800, fontSize: '0.76rem', background: `linear-gradient(135deg, ${C.mustard}, ${C.mustardDark})`, color: C.navy, border: 'none', cursor: 'pointer' }}
                 >
                   <TrendingUp size={13} />
-                  Subscribe
+                  <span className="motisha-subscribe-label">Subscribe</span>
                 </button>
               )}
             </div>
@@ -374,7 +386,7 @@ export function MotishaApp() {
         </header>
 
         {/* ── Scrollable content ── */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px 40px' }}>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px 40px' }} className="motisha-main-content">
 
         {/* Tab panels */}
         <div style={tabStyle('home')}>
@@ -478,6 +490,62 @@ export function MotishaApp() {
       <Suspense fallback={null}>
         <UploadPopup onOpen={() => handleNav('calendar')} />
       </Suspense>
+
+      <style>{`
+        /* ── Mobile header adjustments ── */
+        @media (max-width: 768px) {
+          .motisha-header-bar {
+            padding: 10px 14px 10px 62px !important;
+          }
+          .motisha-header-title {
+            font-size: 0.95rem !important;
+          }
+          .motisha-header-sub {
+            display: none !important;
+          }
+          .motisha-subscribe-label {
+            display: none !important;
+          }
+          .motisha-subscribe-btn {
+            padding: 8px 10px !important;
+          }
+          .motisha-main-content {
+            padding: 16px 14px 40px !important;
+          }
+          .motisha-banner {
+            padding: 8px 14px !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+          }
+          .motisha-banner-detail {
+            display: none !important;
+          }
+        }
+        /* ── Shared banner styles ── */
+        .motisha-banner {
+          padding: 8px 32px;
+          border-bottom: 1px solid transparent;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .motisha-banner--trial {
+          background: linear-gradient(135deg, rgba(245,158,11,0.09), rgba(217,119,6,0.05));
+          border-bottom-color: rgba(245,158,11,0.3);
+        }
+        .motisha-banner--danger {
+          background: linear-gradient(135deg, rgba(239,68,68,0.09), rgba(239,68,68,0.05));
+          border-bottom-color: rgba(239,68,68,0.3);
+        }
+        .motisha-banner-content {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          min-width: 0;
+        }
+      `}</style>
     </div>
   );
 }

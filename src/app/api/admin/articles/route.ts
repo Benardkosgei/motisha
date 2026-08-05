@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageContent } from '@/lib/admin-rbac';
+import { ArticleCreateSchema, validateBody } from '@/lib/validation-schemas';
 
 /**
  * GET /api/admin/articles
@@ -53,33 +54,25 @@ export async function POST(request: NextRequest) {
   if (!canManageContent(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const reqBody = await request.json();
-    const { title, body, icon, premium, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, slide_expires_at, publish_at, published_at, status } = reqBody;
+    const rawBody = await request.json();
 
-    // Validate required fields
-    if (!title || typeof title !== 'string' || title.trim() === '') {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+    const validation = validateBody(ArticleCreateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
     }
 
-    // Validate body is non-empty (strip HTML tags to check for actual content)
-    const bodyText = typeof body === 'string' ? body.replace(/<[^>]*>/g, '').trim() : '';
-    if (!body || bodyText === '') {
-      return NextResponse.json(
-        { error: 'Body content is required and cannot be empty' },
-        { status: 400 }
-      );
-    }
+    const reqBody = validation.data;
+    const { title, body, icon, week, slide_enabled, slide_title, slide_tag, slide_sub, slide_accent, slide_expires_at, publish_at, status } = reqBody;
+    const premium = (rawBody as Record<string, unknown>).premium === true;
+    const published_at = (rawBody as Record<string, unknown>).published_at as string | undefined;
 
     // Prepare insert data
     const insertData: Record<string, unknown> = {
       type: 'Article',
       title: title.trim(),
-      body: body.trim(),
+      body: body ? body.trim() : null,
       icon: icon || null,
-      premium: premium === true,
+      premium: premium,
       week: week || null,
       slide_enabled: slide_enabled === true,
       slide_expires_at: slide_enabled === true ? (slide_expires_at || null) : null,

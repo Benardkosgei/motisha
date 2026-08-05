@@ -13,13 +13,14 @@ export async function GET(request: NextRequest) {
   try {
     const { data, error } = await supabaseAdmin
       .from('plans')
-      .select('*')
+      .select('id, package, billing, price_kes, max_accounts, features, created_at, updated_at')
       .order('package', { ascending: true })
       .order('price_kes', { ascending: true });
 
     if (error) throw error;
 
-    // Compute live active_subscribers from profiles instead of the stale column
+    // Compute live active_subscribers from profiles — the DB column was dropped
+    // because it was never maintained. This query counts active (non-expired) subs.
     const { data: profileCounts, error: countError } = await supabaseAdmin
       .from('profiles')
       .select('subscription_package, subscription_billing')

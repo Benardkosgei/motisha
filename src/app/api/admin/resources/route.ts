@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageContent } from '@/lib/admin-rbac';
+import { ResourceCreateSchema, validateBody } from '@/lib/validation-schemas';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',

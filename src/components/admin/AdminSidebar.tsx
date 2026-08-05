@@ -20,6 +20,7 @@ import {
   Briefcase,
   CalendarCheck,
   TrendingUp,
+  Activity,
 } from 'lucide-react';
 import { C } from '@/components/Logo';
 import { useLogo } from '@/lib/use-logo';
@@ -46,7 +47,10 @@ const NAV_LINKS: NavLink[] = [
   { label: 'Plans',         href: '/admin/plans',        icon: <CreditCard size={16} />,      section: 'plans'       },
   { label: 'Users',         href: '/admin/users',        icon: <Users size={16} />,           section: 'users'       },
   { label: 'Revenue',       href: '/admin/revenue',      icon: <DollarSign size={16} />,      section: 'revenue'     },
-  { label: 'Settings',      href: '/admin/settings',     icon: <Settings size={16} />,        section: 'settings'    },
+  { label: 'M-Pesa Logs',  href: '/admin/mpesa-logs',          icon: <Activity size={16} />,       section: 'mpesa-logs'          },
+  { label: 'Author Review', href: '/admin/author-submissions',  icon: <FileText size={16} />,       section: 'author-submissions'  },
+  { label: 'Payouts',       href: '/admin/payout-requests',     icon: <DollarSign size={16} />,     section: 'payout-requests'     },
+  { label: 'Settings',      href: '/admin/settings',            icon: <Settings size={16} />,       section: 'settings'            },
 ];
 
 interface AdminSidebarProps {
@@ -191,6 +195,7 @@ function SidebarContent({
             <Link
               key={link.href}
               href={link.href}
+              prefetch={false}
               onClick={onClose}
               aria-current={active ? 'page' : undefined}
               style={{
@@ -222,6 +227,7 @@ function SidebarContent({
       <div style={{ padding: '10px 8px 20px', borderTop: `1px solid rgba(14,165,233,0.08)`, marginTop: 8 }}>
         <Link
           href="/"
+          prefetch={false}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 12px', borderRadius: 8, marginBottom: 4,

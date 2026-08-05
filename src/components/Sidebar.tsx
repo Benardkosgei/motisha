@@ -184,11 +184,11 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
         style={{
           display: 'none',
           position: 'fixed',
-          top: 14,
-          left: 14,
+          top: 12,
+          left: 12,
           zIndex: 10001,
-          width: 40,
-          height: 40,
+          width: 42,
+          height: 42,
           borderRadius: 10,
           background: C.navyMid,
           border: `1px solid rgba(14,165,233,0.3)`,
@@ -196,6 +196,7 @@ export function Sidebar({ active, onNav, notifCount, profile, onSignOut }: Sideb
           cursor: 'pointer',
           alignItems: 'center',
           justifyContent: 'center',
+          flexShrink: 0,
         }}
         className="mobile-menu-btn"
       >

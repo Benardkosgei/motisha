@@ -30,8 +30,11 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      console.warn('[session-token/verify] Invalid token:', authError?.message);
-      return NextResponse.json({ valid: false, reason: 'Invalid token' }, { status: 401 });
+      // Expired or invalid token — this is a Supabase session issue, not a device mismatch.
+      // Return 200 with valid: true so the client doesn't force-logout on token expiry.
+      // The client's onAuthStateChange listener will handle actual session expiry.
+      console.warn('[session-token/verify] Token validation failed (expired or invalid):', authError?.message);
+      return NextResponse.json({ valid: true, reason: 'Token expired' }, { status: 200 });
     }
 
     const userId = user.id;
@@ -44,8 +47,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !profile) {
-      console.error('[session-token/verify] Profile fetch error:', error?.message);
-      return NextResponse.json({ valid: false, reason: 'User not found' }, { status: 404 });
+      // Profile fetch failed — could be missing column (migration not run) or RLS issue.
+      // Treat as non-blocking rather than forcing logout.
+      console.error('[session-token/verify] Profile fetch error (migration may be missing):', error?.message);
+      return NextResponse.json({ valid: true, reason: 'Profile unavailable' }, { status: 200 });
     }
 
     // If no fingerprint is stored, this is the first login - store it

@@ -6,11 +6,12 @@ import {
   Settings, Palette, Mail, Bell, Shield, Save, Upload,
   ExternalLink, CheckCircle, AlertTriangle, Eye, EyeOff,
   Lock, User, Globe, FileCheck, Key, RefreshCw, Smartphone, Gift,
-  CalendarDays, Plus, Pencil, Trash2, CheckCircle2, Phone, Building2, Megaphone,
+  CalendarDays, Plus, Pencil, Trash2, CheckCircle2, Phone, Building2, Megaphone, Users,
 } from 'lucide-react';
 import { C } from '@/components/Logo';
 import { invalidateLogoCache } from '@/lib/use-logo';
 import type { AcademicTerm } from '@/lib/academic-terms';
+import { SubAccountManager } from '@/components/admin/SubAccountManager';
 
 interface SystemSettings {
   logo_url?: { url: string | null };
@@ -23,19 +24,19 @@ interface SystemSettings {
     port?: number;
     secure?: boolean;
     username?: string;
-    password?: string;   // masked in UI — never displayed
+    password?: string;
     sender_name?: string;
     sender_address?: string;
   };
   notifications_enabled?: { enabled: boolean };
-  mpesa_config?: { shortcode?: string; callback_url?: string; env?: string; consumer_key?: string; consumer_secret?: string; passkey?: string };
+  mpesa_config?: { shortcode?: string; shortcode_type?: 'till' | 'paybill'; callback_url?: string; env?: string; consumer_key?: string; consumer_secret?: string; passkey?: string };
   referral_rates?: { individual?: number; admin?: number };
   contact_info?: { owner_name?: string; whatsapp?: string; email?: string; support_email?: string; response_hours?: number };
   bank_details?: { bank_name?: string; account_name?: string; account_number?: string; branch?: string };
   _timestamps?: Record<string, string>;
 }
 
-type TabId = 'system' | 'branding' | 'email' | 'notifications' | 'payments' | 'referral' | 'contact' | 'hero' | 'calendar' | 'security';
+type TabId = 'system' | 'branding' | 'email' | 'notifications' | 'payments' | 'referral' | 'contact' | 'hero' | 'calendar' | 'security' | 'team';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'system',        label: 'System',        icon: Globe },
@@ -47,6 +48,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'contact',       label: 'Contact & Bank', icon: Phone },
   { id: 'hero',          label: 'Hero Slides',   icon: Megaphone },
   { id: 'calendar',      label: 'Academic Calendar', icon: CalendarDays },
+  { id: 'team',          label: 'Team',          icon: Users },
   { id: 'security',      label: 'Security',      icon: Shield },
 ];
 
@@ -507,6 +509,8 @@ function NotificationsSettingsTab({ s, onSaved }: { s: SystemSettings; onSaved: 
 function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSettings) => void }) {
   const cfg = s.mpesa_config ?? {};
   const [shortcode, setShortcode] = useState(cfg.shortcode ?? '');
+  const [tillNumber, setTillNumber] = useState((cfg as Record<string, unknown>).till_number as string ?? '');
+  const [shortcodeType, setShortcodeType] = useState<'till' | 'paybill'>((cfg.shortcode_type as 'till' | 'paybill') ?? 'paybill');
   const [callbackUrl, setCallbackUrl] = useState(cfg.callback_url ?? '');
   const [env, setEnv] = useState(cfg.env ?? 'sandbox');
   const [consumerKey, setConsumerKey] = useState(cfg.consumer_key ?? '');
@@ -517,12 +521,15 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
   const [err, setErr] = useState('');
 
   async function save() {
-    if (!shortcode.trim()) { setErr('Shortcode is required.'); return; }
+    if (!shortcode.trim()) { setErr('Business Shortcode is required.'); return; }
+    if (shortcodeType === 'till' && !tillNumber.trim()) { setErr('Till Number is required when using Buy Goods (Till).'); return; }
     if (callbackUrl && !callbackUrl.startsWith('https://')) { setErr('Callback URL must start with https://'); return; }
     setBusy(true); setErr(''); setOk('');
     try {
       const fd = new FormData();
       fd.append('mpesa_shortcode', shortcode);
+      fd.append('mpesa_shortcode_type', shortcodeType);
+      fd.append('mpesa_till_number', tillNumber);
       fd.append('mpesa_callback_url', callbackUrl);
       fd.append('mpesa_env', env);
       fd.append('mpesa_consumer_key', consumerKey);
@@ -549,7 +556,32 @@ function PaymentsTab({ s, onSaved }: { s: SystemSettings; onSaved: (x: SystemSet
           <div style={fld}>
             <label style={lbl}><Smartphone size={13} />Business Shortcode</label>
             <input type="text" value={shortcode} onChange={e => setShortcode(e.target.value)} placeholder="e.g. 174379" style={inp} />
-            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Your Safaricom Paybill or Till number.</p>
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>
+              {shortcodeType === 'till'
+                ? 'Your Daraja API / Agent shortcode (Head Office number).'
+                : 'Your Safaricom Paybill number.'}
+            </p>
+          </div>
+          {shortcodeType === 'till' && (
+            <div style={fld}>
+              <label style={lbl}><Smartphone size={13} />Till Number <span style={{ color: C.danger, marginLeft: 2 }}>*</span></label>
+              <input type="text" value={tillNumber} onChange={e => setTillNumber(e.target.value)} placeholder="e.g. 3432855" style={inp} />
+              <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>
+                The physical store/till number customers pay to (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 4px', borderRadius: 3 }}>PartyB</code> in STK push). Must match the store linked to your Daraja app.
+              </p>
+            </div>
+          )}
+          <div style={fld}>
+            <label style={lbl}><Smartphone size={13} />Shortcode Type</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['till', 'paybill'] as const).map(t => (
+                <button key={t} type="button" onClick={() => setShortcodeType(t)}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 8, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', border: 'none', transition: 'all 0.2s', background: shortcodeType === t ? `${C.teal}25` : 'rgba(255,255,255,0.05)', color: shortcodeType === t ? C.teal : C.gray, outline: shortcodeType === t ? `1px solid ${C.teal}40` : '1px solid rgba(255,255,255,0.1)' }}>
+                  {t === 'till' ? '🛒 Buy Goods (Till)' : '💳 Paybill'}
+                </button>
+              ))}
+            </div>
+            <p style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4 }}>Till uses <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 4px', borderRadius: 3 }}>CustomerBuyGoodsOnline</code>; Paybill uses <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 4px', borderRadius: 3 }}>CustomerPayBillOnline</code>.</p>
           </div>
           <div style={fld}>
             <label style={lbl}><Globe size={13} />Callback URL</label>
@@ -1717,6 +1749,7 @@ export default function SettingsPage() {
             {tab.id === 'contact'       && <ContactBankTab          s={settings} onSaved={setSettings} />}
             {tab.id === 'hero'          && <HeroSlidesTab           s={settings} onSaved={setSettings} />}
             {tab.id === 'calendar'      && <AcademicCalendarTab />}
+            {tab.id === 'team'          && <div style={{ padding: '4px 0' }}><SubAccountManager /></div>}
             {tab.id === 'security'      && <SecurityTab adminEmail={adminEmail} adminRole={adminRole} />}
           </div>
         );

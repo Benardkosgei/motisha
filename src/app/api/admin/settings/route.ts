@@ -61,6 +61,8 @@ export async function PATCH(request: NextRequest) {
     const emailSenderAddress    = formData.get('email_sender_address') as string | null;
     const notificationsEnabled  = formData.get('notifications_enabled') as string | null;
     const mpesaShortcode        = formData.get('mpesa_shortcode') as string | null;
+    const mpesaShortcodeType    = formData.get('mpesa_shortcode_type') as string | null;
+    const mpesaTillNumber       = formData.get('mpesa_till_number') as string | null;
     const mpesaCallbackUrl      = formData.get('mpesa_callback_url') as string | null;
     const mpesaEnv              = formData.get('mpesa_env') as string | null;
     const mpesaConsumerKey      = formData.get('mpesa_consumer_key') as string | null;
@@ -188,7 +190,8 @@ export async function PATCH(request: NextRequest) {
       updates.push({ key: 'notifications_enabled', value: { enabled: notificationsEnabled === 'true' } });
 
     // ── M-Pesa settings ───────────────────────────────────────────────────────
-    if (mpesaShortcode !== null || mpesaCallbackUrl !== null || mpesaEnv !== null ||
+    if (mpesaShortcode !== null || mpesaShortcodeType !== null || mpesaTillNumber !== null ||
+        mpesaCallbackUrl !== null || mpesaEnv !== null ||
         mpesaConsumerKey !== null || mpesaConsumerSecret !== null || mpesaPasskey !== null) {
       // Fetch existing mpesa config to merge
       const { data: existing } = await supabaseAdmin
@@ -199,6 +202,9 @@ export async function PATCH(request: NextRequest) {
       const current = (existing?.value ?? {}) as Record<string, unknown>;
       const merged: Record<string, unknown> = { ...current };
       if (mpesaShortcode !== null) merged.shortcode = mpesaShortcode;
+      if (mpesaShortcodeType !== null && ['till', 'paybill'].includes(mpesaShortcodeType)) merged.shortcode_type = mpesaShortcodeType;
+      // till_number is the physical store/till number (PartyB). Only used when shortcode_type = 'till'.
+      if (mpesaTillNumber !== null) merged.till_number = mpesaTillNumber;
       if (mpesaCallbackUrl !== null) merged.callback_url = mpesaCallbackUrl;
       if (mpesaEnv !== null) merged.env = mpesaEnv;
       // Only update secrets if a non-empty value was submitted (preserve existing if blank)

@@ -1,137 +1,125 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createClient } from '@supabase/supabase-js';
+import {
+  loadMpesaConfig,
+  getDarajaToken,
+  getDarajaBaseUrl,
+  formatMpesaPhone,
+  getDarajaTimestamp,
+  buildStkPassword,
+  getTransactionType,
+} from '@/lib/mpesa-helpers';
+import { logMpesa } from '@/lib/mpesa-logger';
+import { MPesaSTKPushSchema, validateBody } from '@/lib/validation-schemas';
 
-// ─── M-Pesa config loader ─────────────────────────────────────────────────────
+// ─── Simple in-process rate limiter ──────────────────────────────────────────
+const WINDOW_MS = 60_000;
+const MAX_PER_WINDOW = 3;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-interface MpesaConfig {
-  consumerKey: string;
-  consumerSecret: string;
-  shortcode: string;
-  passkey: string;
-  callbackUrl: string;
-  env: string; // 'sandbox' | 'production'
-}
-
-/**
- * Loads M-Pesa credentials from system_settings (DB), falling back to env vars.
- * The admin dashboard saves consumer key/secret under the `mpesa_config` key.
- */
-async function loadMpesaConfig(): Promise<MpesaConfig> {
-  // Try DB first
-  const { data } = await supabaseAdmin
-    .from('system_settings')
-    .select('value')
-    .eq('key', 'mpesa_config')
-    .single();
-
-  const db = (data?.value ?? {}) as Record<string, string>;
-
-  const consumerKey   = db.consumer_key    || process.env.MPESA_CONSUMER_KEY    || '';
-  const consumerSecret= db.consumer_secret || process.env.MPESA_CONSUMER_SECRET || '';
-  const shortcode     = db.shortcode       || process.env.MPESA_SHORTCODE       || '';
-  const passkey       = db.passkey         || process.env.MPESA_PASSKEY         || '';
-  const callbackUrl   = db.callback_url    || process.env.MPESA_CALLBACK_URL    || '';
-  const env           = db.env             || process.env.MPESA_ENV             || 'sandbox';
-
-  if (!consumerKey || !consumerSecret) {
-    throw new Error('M-Pesa consumer key/secret not configured. Set them in Admin → Settings → M-Pesa or in environment variables.');
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
   }
-  if (!shortcode || !passkey) {
-    throw new Error('M-Pesa shortcode or passkey not configured.');
-  }
-  if (!callbackUrl) {
-    throw new Error('M-Pesa callback URL not configured.');
-  }
-
-  return { consumerKey, consumerSecret, shortcode, passkey, callbackUrl, env };
-}
-
-// ─── Daraja API helpers ───────────────────────────────────────────────────────
-
-async function getDarajaToken(config: MpesaConfig): Promise<string> {
-  const credentials = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
-
-  const isProduction = config.env === 'production';
-  const tokenUrl = isProduction
-    ? 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-    : 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
-
-  const res = await fetch(tokenUrl, {
-    headers: { Authorization: `Basic ${credentials}` },
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Failed to get Daraja token (${res.status}): ${body}`);
-  }
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error(`Daraja token response missing access_token: ${JSON.stringify(data)}`);
-  }
-  return data.access_token as string;
-}
-
-function formatPhone(phone: string): string {
-  // Normalize to 254XXXXXXXXX format
-  let p = phone.trim().replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-  if (p.startsWith('+')) p = p.slice(1);
-  if (p.startsWith('07') || p.startsWith('01')) p = '254' + p.slice(1);
-  if (!p.startsWith('254')) p = '254' + p;
-  return p;
-}
-
-function getTimestamp(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return (
-    now.getFullYear().toString() +
-    pad(now.getMonth() + 1) +
-    pad(now.getDate()) +
-    pad(now.getHours()) +
-    pad(now.getMinutes()) +
-    pad(now.getSeconds())
-  );
+  if (entry.count >= MAX_PER_WINDOW) return true;
+  entry.count += 1;
+  return false;
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { phone, amount, package: pkg, billing, userId } = body as {
-      phone: string;
-      amount: number;
-      package: 'individual' | 'admin';
-      billing: 'monthly' | 'termly' | 'yearly';
-      userId?: string;
-    };
+  let resolvedUserId: string | null = null;
+  let formattedPhone: string | null = null;
+  let amountInt: number | null = null;
+  let pkg: string | null = null;
+  let billing: string | null = null;
 
-    if (!phone || !amount || !pkg || !billing) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  try {
+    // ── Authenticate caller ───────────────────────────────────────────────────
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized — missing session token' }, { status: 401 });
     }
 
+    const accessToken = authHeader.slice(7);
+    const supabaseClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized — invalid or expired session' }, { status: 401 });
+    }
+
+    // ── Parse + validate body ─────────────────────────────────────────────────
+    const rawBody = await req.json();
+
+    const validation = validateBody(MPesaSTKPushSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
+    }
+
+    const { phone, amount, package: pkgRaw, billing: billingRaw, userId } = validation.data;
+
+    if (userId && userId !== user.id) {
+      return NextResponse.json({ error: 'Forbidden — userId does not match session' }, { status: 403 });
+    }
+
+    resolvedUserId = userId ?? user.id;
+    pkg = pkgRaw;
+    billing = billingRaw;
+
+    if (isRateLimited(resolvedUserId)) {
+      return NextResponse.json(
+        { error: 'Too many payment requests. Please wait a minute before trying again.' },
+        { status: 429 }
+      );
+    }
+
+    amountInt = Math.round(Number(amount));
+
+    // ── Load config + build STK push ──────────────────────────────────────────
     const mpesaConfig = await loadMpesaConfig();
-    const { shortcode, passkey, callbackUrl } = mpesaConfig;
-    const isProduction = mpesaConfig.env === 'production';
+    const { shortcode, tillNumber, passkey, callbackUrl } = mpesaConfig;
+    const baseUrl         = getDarajaBaseUrl(mpesaConfig);
+    const token           = await getDarajaToken(mpesaConfig);
+    const timestamp       = getDarajaTimestamp();
+    const password        = buildStkPassword(shortcode, passkey, timestamp);
+    const transactionType = getTransactionType(mpesaConfig);
+    formattedPhone        = formatMpesaPhone(phone);
 
-    const baseUrl = isProduction
-      ? 'https://api.safaricom.co.ke'
-      : 'https://sandbox.safaricom.co.ke';
+    // For Till (Buy Goods): BusinessShortCode = Agent/Head-Office shortcode,
+    //                       PartyB = Store/Till number.
+    // For Paybill:          Both BusinessShortCode and PartyB = the same shortcode.
+    const partyB = mpesaConfig.shortcodeType === 'till' ? tillNumber : shortcode;
 
-    const token = await getDarajaToken(mpesaConfig);
-    const timestamp = getTimestamp();
-    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
-    const formattedPhone = formatPhone(phone);
+    console.info('[mpesa/stk-push] initiating:', {
+      env: mpesaConfig.env,
+      shortcode,
+      tillNumber,
+      partyB,
+      shortcodeType: mpesaConfig.shortcodeType,
+      transactionType,
+      callbackUrl,
+      formattedPhone,
+      amount: amountInt,
+    });
 
     const stkPayload = {
       BusinessShortCode: shortcode,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
-      Amount: amount,
+      TransactionType: transactionType,
+      Amount: amountInt,
       PartyA: formattedPhone,
-      PartyB: shortcode,
+      PartyB: partyB,
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: `MOTISHA-${pkg.toUpperCase()}`,
@@ -147,32 +135,63 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(stkPayload),
     });
 
-    const stkData = await stkRes.json();
+    const stkData = await stkRes.json() as Record<string, unknown>;
+    console.info('[mpesa/stk-push] Daraja response:', stkData);
 
     if (!stkRes.ok || stkData.ResponseCode !== '0') {
-      console.error('[mpesa] STK push failed:', stkData);
-      return NextResponse.json(
-        { error: stkData.errorMessage || stkData.ResponseDescription || 'STK push failed' },
-        { status: 400 }
-      );
+      const errMsg = (stkData.errorMessage || stkData.ResponseDescription || 'STK push failed') as string;
+      console.error('[mpesa/stk-push] STK push failed:', stkData);
+
+      logMpesa({
+        event: 'stk_push_failed',
+        user_id: resolvedUserId,
+        phone: formattedPhone,
+        amount: amountInt,
+        package: pkg,
+        billing,
+        result_code: stkData.ResponseCode ? Number(stkData.ResponseCode) : null,
+        result_desc: stkData.ResponseDescription as string ?? null,
+        error_message: errMsg,
+        raw_payload: {
+          request: { shortcode, callbackUrl, transactionType, formattedPhone, amount: amountInt },
+          response: stkData,
+        },
+      });
+
+      return NextResponse.json({ error: errMsg }, { status: 400 });
     }
 
-    // Store pending subscription record
-    // We'll get the user from the session cookie — for now store with checkout ID
-    // The callback will complete it
     const checkoutId = stkData.CheckoutRequestID as string;
 
-    // Store pending payment with user_id so the callback can link it directly
-    // without relying solely on phone number lookup (which can fail on format mismatch)
+    // Log successful initiation
+    logMpesa({
+      event: 'stk_push_initiated',
+      checkout_id: checkoutId,
+      user_id: resolvedUserId,
+      phone: formattedPhone,
+      amount: amountInt,
+      package: pkg,
+      billing,
+      result_code: 0,
+      result_desc: stkData.ResponseDescription as string ?? 'Success',
+      raw_payload: {
+        shortcode,
+        callbackUrl,
+        transactionType,
+        merchantRequestId: stkData.MerchantRequestID,
+      },
+    });
+
+    // Store pending payment record
     await supabaseAdmin.from('system_settings').upsert({
       key: `mpesa_pending_${checkoutId}`,
       value: {
         checkoutId,
         phone: formattedPhone,
-        amount,
+        amount: amountInt,
         package: pkg,
         billing,
-        userId: userId ?? null,
+        userId: resolvedUserId,
         timestamp: new Date().toISOString(),
       },
     }, { onConflict: 'key' });
@@ -182,11 +201,22 @@ export async function POST(req: NextRequest) {
       checkoutRequestId: checkoutId,
       message: 'STK push sent. Enter your M-Pesa PIN to complete payment.',
     });
+
   } catch (err) {
-    console.error('[mpesa] Error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Internal server error' },
-      { status: 500 }
-    );
+    const errMsg = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[mpesa/stk-push] error:', err);
+
+    logMpesa({
+      event: 'stk_push_failed',
+      user_id: resolvedUserId,
+      phone: formattedPhone,
+      amount: amountInt,
+      package: pkg,
+      billing,
+      error_message: errMsg,
+      raw_payload: { error: String(err) },
+    });
+
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }

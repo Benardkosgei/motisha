@@ -16,6 +16,15 @@ interface LeaderboardEntry {
   isMe?: boolean;
 }
 
+interface PayoutRequest {
+  id: string;
+  amount_kes: number;
+  payment_method: string;
+  status: string;
+  admin_notes: string | null;
+  created_at: string;
+}
+
 interface ReferralTabProps {
   profile: Profile | null;
 }
@@ -28,6 +37,18 @@ export function ReferralTab({ profile }: ReferralTabProps) {
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
   const [myRefs, setMyRefs] = useState(0);
   const [commissions, setCommissions] = useState<{ total: number; pending: number }>({ total: 0, pending: 0 });
+
+  // Payout state
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [showPayoutForm, setShowPayoutForm] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState<'mpesa' | 'bank'>('mpesa');
+  const [payoutPhone, setPayoutPhone] = useState('');
+  const [payoutBank, setPayoutBank] = useState('');
+  const [payoutBankName, setPayoutBankName] = useState('');
+  const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+  const [payoutOk, setPayoutOk] = useState('');
+  const [payoutErr, setPayoutErr] = useState('');
 
   const code = profile?.referral_code ?? '—';
   const points = profile?.points ?? 0;
@@ -83,16 +104,77 @@ export function ReferralTab({ profile }: ReferralTabProps) {
     setCommissions({ total, pending });
   }, [session?.user]);
 
+  const fetchPayoutRequests = useCallback(async () => {
+    if (!session?.access_token) return;
+    try {
+      const res = await fetch('/api/referral/payout-request', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      setPayoutRequests(json.requests ?? []);
+    } catch {
+      // silent — payout history is supplemental
+    }
+  }, [session?.access_token]);
+
   useEffect(() => {
     fetchLeaderboard();
     fetchCommissions();
-  }, [fetchLeaderboard, fetchCommissions]);
+    fetchPayoutRequests();
+  }, [fetchLeaderboard, fetchCommissions, fetchPayoutRequests]);
 
   const handleCopy = () => {
     if (code === '—') return;
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePayoutSubmit = async () => {
+    if (!session?.access_token) return;
+    setPayoutErr('');
+    const amount = parseFloat(payoutAmount);
+    if (isNaN(amount) || amount < 100) {
+      setPayoutErr('Minimum payout is KES 100');
+      return;
+    }
+    if (payoutMethod === 'mpesa' && !payoutPhone.trim()) {
+      setPayoutErr('M-Pesa phone number is required');
+      return;
+    }
+    if (payoutMethod === 'bank' && (!payoutBank.trim() || !payoutBankName.trim())) {
+      setPayoutErr('Bank account and bank name are required');
+      return;
+    }
+    setPayoutSubmitting(true);
+    try {
+      const res = await fetch('/api/referral/payout-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          amount_kes: amount,
+          payment_method: payoutMethod,
+          mpesa_phone: payoutMethod === 'mpesa' ? payoutPhone.trim() : undefined,
+          bank_account: payoutMethod === 'bank' ? payoutBank.trim() : undefined,
+          bank_name: payoutMethod === 'bank' ? payoutBankName.trim() : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Failed to submit');
+      setPayoutOk('Payout request submitted! Admin will process it within 1–3 business days.');
+      setPayoutAmount(''); setPayoutPhone(''); setPayoutBank(''); setPayoutBankName('');
+      setShowPayoutForm(false);
+      fetchPayoutRequests();
+      setTimeout(() => setPayoutOk(''), 6000);
+    } catch (e) {
+      setPayoutErr(e instanceof Error ? e.message : 'Failed to submit payout request');
+    } finally {
+      setPayoutSubmitting(false);
+    }
   };
 
   return (
@@ -185,6 +267,136 @@ export function ReferralTab({ profile }: ReferralTabProps) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Payout request section */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h3 style={{ color: C.white, fontWeight: 700, fontSize: '0.9rem', margin: 0 }}>💸 Request Payout</h3>
+          {commissions.total >= 100 && !showPayoutForm && (
+            <button
+              onClick={() => { setShowPayoutForm(true); setPayoutErr(''); }}
+              style={{ padding: '7px 16px', borderRadius: 8, background: `linear-gradient(135deg, ${C.success}30, ${C.success}20)`, color: C.success, border: `1px solid ${C.success}40`, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+            >
+              + Request Payout
+            </button>
+          )}
+        </div>
+
+        {/* Feedback banners */}
+        {payoutOk && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: `${C.success}15`, border: `1px solid ${C.success}35`, color: C.success, fontSize: '0.82rem', marginBottom: 12 }}>
+            ✓ {payoutOk}
+          </div>
+        )}
+        {payoutErr && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: `${C.danger}15`, border: `1px solid ${C.danger}35`, color: C.danger, fontSize: '0.82rem', marginBottom: 12 }}>
+            ⚠ {payoutErr}
+          </div>
+        )}
+
+        {/* Payout form */}
+        {showPayoutForm && (
+          <div style={{ padding: 18, borderRadius: 12, background: `${C.success}08`, border: `1px solid ${C.success}25`, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{ color: C.success, fontWeight: 700, fontSize: '0.85rem' }}>New Payout Request</span>
+              <button onClick={() => setShowPayoutForm(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Amount */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>
+                Amount (KES) — Available: KES {commissions.total.toFixed(0)}
+              </label>
+              <input
+                type="number"
+                value={payoutAmount}
+                onChange={e => setPayoutAmount(e.target.value)}
+                placeholder="e.g. 500"
+                min={100}
+                max={commissions.total}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.88rem', boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif", outline: 'none' }}
+              />
+            </div>
+
+            {/* Method */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>Payment Method</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['mpesa', 'bank'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPayoutMethod(m)}
+                    style={{ flex: 1, padding: '8px', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', border: '1px solid', background: payoutMethod === m ? `${C.teal}25` : 'transparent', borderColor: payoutMethod === m ? C.teal : 'rgba(14,165,233,0.15)', color: payoutMethod === m ? C.teal : '#64748B', fontFamily: "'DM Sans',sans-serif" }}
+                  >
+                    {m === 'mpesa' ? '📱 M-Pesa' : '🏦 Bank'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Method-specific fields */}
+            {payoutMethod === 'mpesa' ? (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>M-Pesa Phone</label>
+                <input
+                  type="tel"
+                  value={payoutPhone}
+                  onChange={e => setPayoutPhone(e.target.value)}
+                  placeholder="+254712345678"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.88rem', boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif", outline: 'none' }}
+                />
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                <div>
+                  <label style={{ display: 'block', color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>Bank Name</label>
+                  <input type="text" value={payoutBankName} onChange={e => setPayoutBankName(e.target.value)} placeholder="e.g. Equity Bank" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.85rem', boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif", outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4 }}>Account Number</label>
+                  <input type="text" value={payoutBank} onChange={e => setPayoutBank(e.target.value)} placeholder="0123456789" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.2)', color: C.white, fontSize: '0.85rem', boxSizing: 'border-box', fontFamily: "'DM Sans',sans-serif", outline: 'none' }} />
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handlePayoutSubmit}
+              disabled={payoutSubmitting}
+              style={{ padding: '9px 22px', borderRadius: 8, background: `linear-gradient(135deg, ${C.success}, #16A34A)`, color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.82rem', cursor: payoutSubmitting ? 'not-allowed' : 'pointer', opacity: payoutSubmitting ? 0.65 : 1, fontFamily: "'DM Sans',sans-serif" }}
+            >
+              {payoutSubmitting ? '⏳ Submitting...' : '💰 Submit Payout Request'}
+            </button>
+          </div>
+        )}
+
+        {commissions.total < 100 && (
+          <p style={{ color: '#64748B', fontSize: '0.78rem', padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            Earn at least KES 100 in commissions to request a payout. Current balance: <strong style={{ color: C.mustard }}>KES {commissions.total.toFixed(0)}</strong>
+          </p>
+        )}
+
+        {/* Payout history */}
+        {payoutRequests.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <h4 style={{ color: C.gray, fontSize: '0.78rem', fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Recent Payout Requests</h4>
+            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+              {payoutRequests.slice(0, 5).map((r, i) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: i % 2 === 0 ? 'rgba(14,165,233,0.04)' : 'transparent', borderBottom: i < payoutRequests.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                  <div>
+                    <div style={{ color: C.white, fontSize: '0.82rem', fontWeight: 600 }}>KES {Number(r.amount_kes).toFixed(0)} via {r.payment_method === 'mpesa' ? 'M-Pesa' : 'Bank'}</div>
+                    <div style={{ color: '#64748B', fontSize: '0.68rem', marginTop: 2 }}>{new Date(r.created_at).toLocaleDateString('en-KE')}</div>
+                  </div>
+                  <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 700, background: r.status === 'paid' ? `${C.success}18` : r.status === 'rejected' ? `${C.danger}18` : `${C.mustard}18`, color: r.status === 'paid' ? C.success : r.status === 'rejected' ? C.danger : C.mustard, border: `1px solid ${r.status === 'paid' ? C.success : r.status === 'rejected' ? C.danger : C.mustard}30` }}>
+                    {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Leaderboard */}

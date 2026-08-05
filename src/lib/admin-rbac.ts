@@ -119,7 +119,10 @@ export type AdminNavSection =
   | 'plans'
   | 'users'
   | 'revenue'
-  | 'settings';
+  | 'settings'
+  | 'mpesa-logs'
+  | 'author-submissions'
+  | 'payout-requests';
 
 export function canViewAnalytics(role: AdminRole | undefined): boolean {
   return role === 'super_admin' || role === 'editor';
@@ -143,6 +146,9 @@ export function canAccessSection(
     case 'users':       return canManageUsers(role);
     case 'revenue':     return canViewRevenue(role);
     case 'settings':    return canManageSettings(role);
+    case 'mpesa-logs':  return role === 'super_admin';
+    case 'author-submissions': return canManageContent(role);
+    case 'payout-requests':    return role === 'super_admin';
     default:            return false;
   }
 }

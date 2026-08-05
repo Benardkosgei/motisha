@@ -40,7 +40,7 @@ export function CalendarTab({ profile, onNav }: CalendarTabProps) {
 
   // Fetch the live individual monthly price for the upgrade prompt
   useEffect(() => {
-    fetch('/api/public/plans')
+    fetch('/api/public/plans', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then((data: { plans?: { package: string; billing: string; price_kes: number }[] } | null) => {
         const plan = data?.plans?.find(p => p.package === 'individual' && p.billing === 'monthly');

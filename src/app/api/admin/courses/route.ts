@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireAdminSession, canManageContent } from '@/lib/admin-rbac';
+import { CourseCreateSchema, validateBody } from '@/lib/validation-schemas';
 
 /**
  * GET /api/admin/courses
@@ -53,21 +54,26 @@ export async function POST(request: NextRequest) {
   if (!canManageContent(auth.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const body = await request.json();
-    const {
-      title, description, icon, premium, week, slide_enabled, slide_title,
-      slide_tag, slide_sub, slide_accent, slide_expires_at, modules, publish_at, status,
-      thumbnail_url, trailer_url, level, language, duration_hours, category,
-      objectives, requirements, target_audience, certificate, access_tier,
-    } = body;
+    const rawBody = await request.json();
 
-    // Validate required fields
-    if (!title || typeof title !== 'string' || title.trim() === '') {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+    const validation = validateBody(CourseCreateSchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.message, details: validation.error.details }, { status: 400 });
     }
+
+    const body = validation.data;
+    const {
+      title, description, icon, week, slide_enabled, slide_title,
+      slide_tag, slide_sub, slide_accent, slide_expires_at, modules, publish_at, status,
+      level, duration_hours, category, certificate, access_tier,
+    } = body;
+    const premium = (rawBody as Record<string, unknown>).premium === true;
+    const thumbnail_url = (rawBody as Record<string, unknown>).thumbnail_url as string | undefined;
+    const trailer_url = (rawBody as Record<string, unknown>).trailer_url as string | undefined;
+    const language = (rawBody as Record<string, unknown>).language as string | undefined;
+    const objectives = (rawBody as Record<string, unknown>).objectives;
+    const requirements = (rawBody as Record<string, unknown>).requirements;
+    const target_audience = (rawBody as Record<string, unknown>).target_audience as string | undefined;
 
     // modules is now optional at creation (managed via curriculum tab)
     const modulesNum = modules !== undefined && modules !== null
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
       title: title.trim(),
       description: description || null,
       icon: icon || null,
-      premium: premium === true,
+      premium: premium,
       week: week || null,
       slide_enabled: slide_enabled === true,
       slide_expires_at: slide_enabled === true ? (slide_expires_at || null) : null,
@@ -96,9 +102,7 @@ export async function POST(request: NextRequest) {
       trailer_url: trailer_url || null,
       level: level || null,
       language: language || 'English',
-      duration_hours: duration_hours !== undefined && duration_hours !== null && duration_hours !== ''
-        ? (typeof duration_hours === 'number' ? duration_hours : parseFloat(String(duration_hours)))
-        : null,
+      duration_hours: duration_hours ?? null,
       category: category || null,
       objectives: Array.isArray(objectives) ? objectives : [],
       requirements: Array.isArray(requirements) ? requirements : [],
